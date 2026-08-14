@@ -2422,6 +2422,10 @@ export class Session {
         return this.remoteSandboxSession.handleStatusRequest(msg);
       case "remote.sandbox.resume.request":
         return this.remoteSandboxSession.handleResumeRequest(msg);
+      case "remote.sandbox.config.get.request":
+        return this.remoteSandboxSession.handleConfigGetRequest(msg);
+      case "remote.sandbox.config.set.request":
+        return this.remoteSandboxSession.handleConfigSetRequest(msg);
       default:
         return undefined;
     }

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import type {
+  RemoteSandboxConfigGetRequest,
+  RemoteSandboxConfigSetRequest,
   RemoteSandboxProvisionRequest,
   RemoteSandboxResumeRequest,
   RemoteSandboxStatusRequest,
@@ -8,6 +10,7 @@ import type {
   SessionOutboundMessage,
 } from "@getpaseo/protocol/messages";
 
+import { getRemoteSandboxConfigStore } from "./config-store.js";
 import { createDaytonaHost } from "./daytona-host.js";
 import { resolveGitOriginUrl } from "./git-origin.js";
 import { createRemoteSandboxProvisioner, type RemoteSandboxProvisioner } from "./provisioner.js";
@@ -27,47 +30,71 @@ export interface RemoteSandboxSessionDeps {
   resolveOriginUrl?: (cwd: string) => Promise<string>;
 }
 
-/** Whether this daemon has the env creds to provision remote sandboxes. */
-export function isRemoteSandboxConfigured(): boolean {
+/**
+ * Effective creds: the saved settings config wins, env vars are the fallback (dev
+ * + backwards compat). Reads the config file fresh so settings changes apply
+ * without restarting the daemon.
+ */
+function resolveCreds(): {
+  daytonaApiKey?: string;
+  daytonaApiUrl?: string;
+  tailscaleAuthKey?: string;
+  tailscaleOauthClientId?: string;
+  tailscaleOauthClientSecret?: string;
+  tailscaleTag?: string;
+  image?: string;
+} {
+  const c = getRemoteSandboxConfigStore().read();
   const env = process.env;
-  if (!env["DAYTONA_API_KEY"]) return false;
+  return {
+    daytonaApiKey: c.daytonaApiKey || env["DAYTONA_API_KEY"],
+    daytonaApiUrl: c.daytonaApiUrl || env["DAYTONA_API_URL"],
+    tailscaleAuthKey: c.tailscaleAuthKey || env["TAILSCALE_AUTH_KEY"],
+    tailscaleOauthClientId: c.tailscaleOauthClientId || env["TAILSCALE_OAUTH_CLIENT_ID"],
+    tailscaleOauthClientSecret:
+      c.tailscaleOauthClientSecret || env["TAILSCALE_OAUTH_CLIENT_SECRET"],
+    tailscaleTag: c.tailscaleTag || env["TAILSCALE_TAG"],
+    image: c.image || env["PASEO_SANDBOX_IMAGE"],
+  };
+}
+
+/** Whether this daemon has the creds (settings or env) to provision sandboxes. */
+export function isRemoteSandboxConfigured(): boolean {
+  const creds = resolveCreds();
+  if (!creds.daytonaApiKey) return false;
   return Boolean(
-    env["TAILSCALE_AUTH_KEY"] ||
-    (env["TAILSCALE_OAUTH_CLIENT_ID"] && env["TAILSCALE_OAUTH_CLIENT_SECRET"]),
+    creds.tailscaleAuthKey || (creds.tailscaleOauthClientId && creds.tailscaleOauthClientSecret),
   );
 }
 
 /**
- * Build a provisioner from env creds, or null if this daemon isn't configured
- * for remote sandboxes. Dev uses the static reusable key (TAILSCALE_AUTH_KEY);
- * prod uses per-box OAuth minting (TAILSCALE_OAUTH_CLIENT_ID/_SECRET).
+ * Build a provisioner from the effective creds, or null if unconfigured. A static
+ * reusable key (tailscaleAuthKey) is used directly; otherwise per-box OAuth
+ * minting (tailscaleOauthClientId/_Secret).
  */
-export function buildEnvProvisioner(logger: Logger): RemoteSandboxProvisioner | null {
-  const env = process.env;
-  const daytonaApiKey = env["DAYTONA_API_KEY"];
-  if (!daytonaApiKey) return null;
+export function buildProvisioner(logger: Logger): RemoteSandboxProvisioner | null {
+  const creds = resolveCreds();
+  if (!creds.daytonaApiKey) return null;
 
   let mintTailnetKey: (() => Promise<string>) | null = null;
-  const staticKey = env["TAILSCALE_AUTH_KEY"];
-  const clientId = env["TAILSCALE_OAUTH_CLIENT_ID"];
-  const clientSecret = env["TAILSCALE_OAUTH_CLIENT_SECRET"];
-  if (staticKey) {
-    mintTailnetKey = () => Promise.resolve(staticKey);
-  } else if (clientId && clientSecret) {
+  if (creds.tailscaleAuthKey) {
+    const key = creds.tailscaleAuthKey;
+    mintTailnetKey = () => Promise.resolve(key);
+  } else if (creds.tailscaleOauthClientId && creds.tailscaleOauthClientSecret) {
     mintTailnetKey = createTailscaleKeyMinter({
-      clientId,
-      clientSecret,
-      tags: [env["TAILSCALE_TAG"] ?? "tag:paseo-sandbox"],
+      clientId: creds.tailscaleOauthClientId,
+      clientSecret: creds.tailscaleOauthClientSecret,
+      tags: [creds.tailscaleTag ?? "tag:paseo-sandbox"],
     });
   }
   if (!mintTailnetKey) return null;
 
   return createRemoteSandboxProvisioner({
-    host: createDaytonaHost({ apiKey: daytonaApiKey, apiUrl: env["DAYTONA_API_URL"] }),
+    host: createDaytonaHost({ apiKey: creds.daytonaApiKey, apiUrl: creds.daytonaApiUrl }),
     logger,
-    image: env["PASEO_SANDBOX_IMAGE"] ?? "paseo-sandbox:0.4.0",
+    image: creds.image ?? "paseo-sandbox:0.4.0",
     mintTailnetKey,
-    corsOrigins: env["PASEO_SANDBOX_CORS_ORIGINS"],
+    corsOrigins: process.env["PASEO_SANDBOX_CORS_ORIGINS"],
   });
 }
 
@@ -77,13 +104,18 @@ export function buildEnvProvisioner(logger: Logger): RemoteSandboxProvisioner | 
  * All logic stays here (fork-isolated); session.ts only routes.
  */
 export class RemoteSandboxSession {
-  private readonly provisioner: RemoteSandboxProvisioner | null;
   private readonly resolveOriginUrl: (cwd: string) => Promise<string>;
 
   constructor(private readonly deps: RemoteSandboxSessionDeps) {
-    this.provisioner =
-      deps.provisioner !== undefined ? deps.provisioner : buildEnvProvisioner(deps.logger);
     this.resolveOriginUrl = deps.resolveOriginUrl ?? resolveGitOriginUrl;
+  }
+
+  // Built fresh per access so a settings change applies without reconnecting;
+  // an injected provisioner (tests) still wins.
+  private get provisioner(): RemoteSandboxProvisioner | null {
+    return this.deps.provisioner !== undefined
+      ? this.deps.provisioner
+      : buildProvisioner(this.deps.logger);
   }
 
   async handleProvisionRequest(message: RemoteSandboxProvisionRequest): Promise<void> {
@@ -223,6 +255,33 @@ export class RemoteSandboxSession {
       this.deps.emit({
         type: "remote.sandbox.resume.response",
         payload: { requestId, error: detail },
+      });
+    }
+  }
+
+  async handleConfigGetRequest(message: RemoteSandboxConfigGetRequest): Promise<void> {
+    this.deps.emit({
+      type: "remote.sandbox.config.get.response",
+      payload: {
+        requestId: message.payload.requestId,
+        config: getRemoteSandboxConfigStore().redacted(),
+      },
+    });
+  }
+
+  async handleConfigSetRequest(message: RemoteSandboxConfigSetRequest): Promise<void> {
+    const { requestId, patch } = message.payload;
+    try {
+      const config = getRemoteSandboxConfigStore().update(patch);
+      this.deps.emit({
+        type: "remote.sandbox.config.set.response",
+        payload: { requestId, config, error: null },
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.deps.emit({
+        type: "remote.sandbox.config.set.response",
+        payload: { requestId, config: getRemoteSandboxConfigStore().redacted(), error: detail },
       });
     }
   }
