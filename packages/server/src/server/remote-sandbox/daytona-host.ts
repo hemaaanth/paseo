@@ -1,4 +1,4 @@
-import { Daytona } from "@daytona/sdk";
+import { Daytona, Image } from "@daytona/sdk";
 
 import type {
   CreateSandboxOptions,
@@ -15,11 +15,31 @@ export interface DaytonaHostOptions {
 }
 
 const DEFAULT_RESOURCES = { cpu: 2, memory: 4, disk: 10 };
+const DOCKERFILE_PREFIX = "dockerfile:";
+// Building from a Dockerfile the first time is slow (rust/go/node); Daytona
+// caches the result so later provisions reuse it. A registry ref boots fast.
+const REGISTRY_CREATE_TIMEOUT_S = 180;
+const BUILD_CREATE_TIMEOUT_S = 1800;
 
 /**
- * Daytona-backed {@link SandboxHost}. The image is a pre-built snapshot ref, so
- * boxes boot fast — no per-provision build. Validated end-to-end by the spike
- * (scripts/remote-sandbox-spike.ts) and docs/remote-sandbox-spike.md.
+ * Resolve the image ref. A `dockerfile:<path>` ref builds via
+ * `Image.fromDockerfile` (Daytona builds + caches it, no registry publish);
+ * anything else is a registry/snapshot ref.
+ */
+function resolveImage(ref: string): { image: string | Image; timeoutSeconds: number } {
+  if (ref.startsWith(DOCKERFILE_PREFIX)) {
+    return {
+      image: Image.fromDockerfile(ref.slice(DOCKERFILE_PREFIX.length)),
+      timeoutSeconds: BUILD_CREATE_TIMEOUT_S,
+    };
+  }
+  return { image: ref, timeoutSeconds: REGISTRY_CREATE_TIMEOUT_S };
+}
+
+/**
+ * Daytona-backed {@link SandboxHost}. The image is a registry/snapshot ref (fast
+ * boot) or a `dockerfile:<path>` ref that Daytona builds and caches. Validated
+ * end-to-end by the spike (scripts/remote-sandbox-spike.ts).
  */
 export function createDaytonaHost(options: DaytonaHostOptions = {}): SandboxHost {
   const daytona = new Daytona(
@@ -39,13 +59,17 @@ export function createDaytonaHost(options: DaytonaHostOptions = {}): SandboxHost
 
   return {
     create: async (opts: CreateSandboxOptions): Promise<SandboxHandle> => {
-      const sandbox = await daytona.create({
-        image: opts.image,
-        envVars: opts.env,
-        resources: opts.resources ?? DEFAULT_RESOURCES,
-        autoStopInterval: opts.autoStopMinutes ?? 15,
-        autoDeleteInterval: opts.autoDeleteMinutes ?? 60,
-      });
+      const { image, timeoutSeconds } = resolveImage(opts.image);
+      const sandbox = await daytona.create(
+        {
+          image,
+          envVars: opts.env,
+          resources: opts.resources ?? DEFAULT_RESOURCES,
+          autoStopInterval: opts.autoStopMinutes ?? 15,
+          autoDeleteInterval: opts.autoDeleteMinutes ?? 60,
+        },
+        { timeout: timeoutSeconds },
+      );
       return wrap(sandbox);
     },
     destroy: async (id: string): Promise<void> => {
