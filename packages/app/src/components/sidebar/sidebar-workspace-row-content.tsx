@@ -2,7 +2,8 @@ import { memo, useId, useMemo, useCallback, useState, type ReactNode } from "rea
 import { Text, View, type ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from "react-native-svg";
-import { CircleAlert, Folder, FolderGit2, Monitor } from "lucide-react-native";
+import { CircleAlert, Cloud, Folder, FolderGit2, Monitor } from "lucide-react-native";
+import { useIsRemoteSandboxServer } from "@/runtime/host-runtime"; // FORK: remote sandbox
 import { ProjectStatusIndicator } from "@/components/sidebar/project-leading-visual";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
 import {
@@ -41,6 +42,7 @@ const needsInputColorMapping = (theme: Theme) => ({
 });
 
 const ThemedCircleAlert = withUnistyles(CircleAlert);
+const ThemedCloud = withUnistyles(Cloud); // FORK: remote sandbox
 const ThemedMonitor = withUnistyles(Monitor);
 const ThemedFolder = withUnistyles(Folder);
 const ThemedFolderGit2 = withUnistyles(FolderGit2);
@@ -158,6 +160,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
     settings: { workspaceTitleSource },
   } = useAppSettings();
   const workspaceLabel = resolveSidebarWorkspacePrimaryLabel({ workspace, workspaceTitleSource });
+  const isRemoteSandbox = useIsRemoteSandboxServer(workspace.serverId); // FORK
   const workspaceBranchTextStyle = useMemo(
     () => [
       styles.workspaceBranchText,
@@ -190,6 +193,13 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
         )}
         <View style={styles.workspaceContentColumn}>
           <View style={styles.workspaceTitleRow}>
+            {isRemoteSandbox ? (
+              <ThemedCloud
+                size={13}
+                uniProps={foregroundMutedColorMapping}
+                style={styles.remoteCloudIcon}
+              />
+            ) : null}
             <Text style={workspaceBranchTextStyle} numberOfLines={1}>
               {workspaceLabel}
             </Text>
@@ -526,6 +536,12 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: theme.spacing[2],
+  },
+  // FORK: remote sandbox — cloud glyph before the label; nudge down to sit on
+  // the first text line, negative right margin to tighten against the label.
+  remoteCloudIcon: {
+    marginTop: 3,
+    marginRight: -theme.spacing[1],
   },
   shortcutBadgeOverlay: {
     position: "absolute",

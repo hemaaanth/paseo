@@ -49,8 +49,11 @@ import {
 } from "@/runtime/host-runtime";
 import { useHostFeature, useHostFeatureMap } from "@/runtime/host-features";
 // FORK: remote sandbox
-import { RemoteSandboxSection } from "@/components/remote-sandbox-section";
-import { useRemoteSandboxProvision } from "@/runtime/remote-sandbox";
+import {
+  RemoteSandboxSection,
+  RemoteProvisionStatusLine,
+} from "@/components/remote-sandbox-section";
+import { useRemoteSandboxProvision, type RemoteAgentConfig } from "@/runtime/remote-sandbox";
 import type { HostProfile } from "@/types/host-connection";
 import {
   navigateToWorkspace,
@@ -867,6 +870,26 @@ interface CreateChatAgentInput {
   labels: {
     composerStateRequired: string;
     selectModel: string;
+  };
+}
+
+// FORK: remote sandbox — mirror the composer's picker settings into the config
+// the sandbox agent runs with. Extracted to keep NewWorkspaceScreen under the
+// complexity limit.
+function buildRemoteAgentConfig(
+  composerState: NewWorkspaceComposerState | null | undefined,
+): RemoteAgentConfig | undefined {
+  if (!composerState) {
+    return undefined;
+  }
+  return {
+    ...(composerState.selectedProvider ? { provider: composerState.selectedProvider } : {}),
+    ...(composerState.selectedMode ? { modeId: composerState.selectedMode } : {}),
+    ...(composerState.effectiveModelId ? { model: composerState.effectiveModelId } : {}),
+    ...(composerState.effectiveThinkingOptionId
+      ? { thinkingOptionId: composerState.effectiveThinkingOptionId }
+      : {}),
+    ...(composerState.featureValues ? { featureValues: composerState.featureValues } : {}),
   };
 }
 
@@ -2068,10 +2091,13 @@ export function NewWorkspaceScreen({
         await updateFormPreferences({ launchTarget });
         // FORK: remote sandbox — provision a cloud box instead of a local workspace.
         if (remoteEnabled && supportsRemoteSandbox && client) {
+          const agentConfig = buildRemoteAgentConfig(composerState);
           await provisionRemote({
             client,
             cwd: selectedSourceDirectory ?? "",
             prompt: payload.text,
+            provisionerServerId: selectedServerId,
+            ...(agentConfig ? { agentConfig } : {}),
           });
           return;
         }
@@ -2325,7 +2351,6 @@ export function NewWorkspaceScreen({
             enabled={remoteEnabled}
             onToggle={setRemoteEnabled}
             disabled={isPending}
-            state={remoteState}
           />
           {isTerminalLaunch ? (
             <Composer
@@ -2386,6 +2411,9 @@ export function NewWorkspaceScreen({
             />
           )}
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+          {/* FORK: remote sandbox — status by the composer; component owns the
+              fixed-height slot + enabled gate so this stays declarative. */}
+          <RemoteProvisionStatusLine state={remoteState} enabled={remoteEnabled} />
         </ReanimatedAnimated.View>
       </View>
     </FileDropZone>

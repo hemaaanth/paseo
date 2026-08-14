@@ -24,6 +24,7 @@ function makeFakeHost(execImpl?: (command: string) => SandboxExecResult): FakeHo
       const forced = execImpl(command);
       if (forced.exitCode !== 0) return forced;
     }
+    if (command.includes("pgrep -x tailscaled")) return { exitCode: 0, output: "READY\n" };
     if (command.includes("ip -4")) return { exitCode: 0, output: "100.90.1.2\n" };
     if (command.includes("status --json"))
       return { exitCode: 0, output: "paseo-abc.tail1234.ts.net.\n" };
@@ -39,6 +40,8 @@ function makeFakeHost(execImpl?: (command: string) => SandboxExecResult): FakeHo
     destroy: async (id) => {
       destroyed.push(id);
     },
+    status: async () => "running",
+    resume: async () => {},
   };
   return { host, commands, destroyed };
 }

@@ -2418,6 +2418,10 @@ export class Session {
         return this.remoteSandboxSession.handleProvisionRequest(msg);
       case "remote.sandbox.teardown.request":
         return this.remoteSandboxSession.handleTeardownRequest(msg);
+      case "remote.sandbox.status.request":
+        return this.remoteSandboxSession.handleStatusRequest(msg);
+      case "remote.sandbox.resume.request":
+        return this.remoteSandboxSession.handleResumeRequest(msg);
       default:
         return undefined;
     }

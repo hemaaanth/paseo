@@ -1691,7 +1691,16 @@ export class HostRuntimeStore {
     label?: string;
     timeoutMs?: number;
     hidden?: boolean; // FORK: remote sandbox
-  }): Promise<{ profile: HostProfile; serverId: string; hostname: string | null }> {
+    remoteSandbox?: { sandboxId: string; provisionerServerId: string }; // FORK
+    // FORK: remote sandbox — also return the connected client. The controller
+    // adopts it asynchronously (void start()), so getClient(serverId) races to
+    // null right after this resolves; callers that need it immediately use this.
+  }): Promise<{
+    profile: HostProfile;
+    serverId: string;
+    hostname: string | null;
+    client: DaemonClient;
+  }> {
     if (input.connection.type === "relay") {
       throw new Error("Cannot probe a relay connection without a server id.");
     }
@@ -1716,8 +1725,9 @@ export class HostRuntimeStore {
       connection: input.connection,
       existingClient: client,
       ...(input.hidden ? { hidden: true } : {}), // FORK: remote sandbox
+      ...(input.remoteSandbox ? { remoteSandbox: input.remoteSandbox } : {}), // FORK
     });
-    return { profile, serverId, hostname };
+    return { profile, serverId, hostname, client }; // FORK: client (see above)
   }
 
   async probeAndUpsertDirectConnection(input: {
@@ -1726,7 +1736,13 @@ export class HostRuntimeStore {
     password?: string;
     label?: string;
     hidden?: boolean; // FORK: remote sandbox
-  }): Promise<{ profile: HostProfile; serverId: string; hostname: string | null }> {
+    remoteSandbox?: { sandboxId: string; provisionerServerId: string }; // FORK
+  }): Promise<{
+    profile: HostProfile;
+    serverId: string;
+    hostname: string | null;
+    client: DaemonClient; // FORK: remote sandbox
+  }> {
     const endpoint = normalizeHostPort(input.endpoint);
     const password = input.password?.trim();
     return this.probeAndUpsertConnection({
@@ -1739,6 +1755,7 @@ export class HostRuntimeStore {
         ...(password ? { password } : {}),
       },
       ...(input.hidden ? { hidden: true } : {}), // FORK: remote sandbox
+      ...(input.remoteSandbox ? { remoteSandbox: input.remoteSandbox } : {}), // FORK
     });
   }
 
@@ -1916,6 +1933,7 @@ export class HostRuntimeStore {
     connection: HostConnection;
     existingClient?: DaemonClient;
     hidden?: boolean; // FORK: remote sandbox
+    remoteSandbox?: { sandboxId: string; provisionerServerId: string }; // FORK
   }): Promise<HostProfile> {
     const now = new Date().toISOString();
     const next = upsertHostConnectionInProfiles({
@@ -1925,6 +1943,7 @@ export class HostRuntimeStore {
       connection: input.connection,
       now,
       ...(input.hidden ? { hidden: true } : {}), // FORK: remote sandbox
+      ...(input.remoteSandbox ? { remoteSandbox: input.remoteSandbox } : {}), // FORK
     });
     this.setHostsAndSync(next, {
       initialConnectionByServerId: input.existingClient
@@ -2455,6 +2474,16 @@ export function useHosts(): HostProfile[] {
 // still appear in the unified sidebar.
 export function useVisibleHosts(): HostProfile[] {
   return useHosts().filter((host) => !host.hidden);
+}
+
+// FORK: remote sandbox — is this workspace's host a disposable cloud box? Used
+// to badge remote sessions in the sidebar/top bar. Reactive to host changes.
+export function useIsRemoteSandboxServer(serverId: string | null | undefined): boolean {
+  const hosts = useHosts();
+  return useMemo(
+    () => Boolean(serverId && hosts.some((h) => h.serverId === serverId && h.remoteSandbox)),
+    [hosts, serverId],
+  );
 }
 
 export function useHostRegistryStatus(): HostRegistryStatus {

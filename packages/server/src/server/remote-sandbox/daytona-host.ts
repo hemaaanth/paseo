@@ -5,6 +5,7 @@ import type {
   SandboxExecResult,
   SandboxHandle,
   SandboxHost,
+  SandboxStatus,
 } from "./sandbox-host.js";
 
 export interface DaytonaHostOptions {
@@ -15,6 +16,9 @@ export interface DaytonaHostOptions {
 }
 
 const DEFAULT_RESOURCES = { cpu: 2, memory: 4, disk: 10 };
+// Bound every exec so a stuck command (e.g. a hung `tailscale up`) fails instead
+// of wedging the whole provision. Covers the slowest legit step with margin.
+const DEFAULT_EXEC_TIMEOUT_S = 150;
 const SNAPSHOT_PREFIX = "snapshot:";
 const DOCKERFILE_PREFIX = "dockerfile:";
 // A pre-built snapshot / registry image boots fast; building from a Dockerfile
@@ -39,8 +43,13 @@ export function createDaytonaHost(options: DaytonaHostOptions = {}): SandboxHost
   function wrap(sandbox: Awaited<ReturnType<Daytona["create"]>>): SandboxHandle {
     return {
       id: sandbox.id,
-      exec: async (command): Promise<SandboxExecResult> => {
-        const res = await sandbox.process.executeCommand(command);
+      exec: async (command, timeoutS): Promise<SandboxExecResult> => {
+        const res = await sandbox.process.executeCommand(
+          command,
+          undefined,
+          undefined,
+          timeoutS ?? DEFAULT_EXEC_TIMEOUT_S,
+        );
         return { exitCode: res.exitCode, output: String(res.result ?? "") };
       },
       previewUrl: async (port) => (await sandbox.getPreviewLink(port)).url,
@@ -51,10 +60,12 @@ export function createDaytonaHost(options: DaytonaHostOptions = {}): SandboxHost
     create: async (opts: CreateSandboxOptions): Promise<SandboxHandle> => {
       const base = {
         envVars: opts.env,
-        resources: opts.resources ?? DEFAULT_RESOURCES,
         autoStopInterval: opts.autoStopMinutes ?? 15,
         autoDeleteInterval: opts.autoDeleteMinutes ?? 60,
       };
+      // A snapshot bakes in its own resources; Daytona rejects create() if you
+      // also pass `resources`. Only the image/dockerfile paths set them.
+      const resources = opts.resources ?? DEFAULT_RESOURCES;
       const ref = opts.image;
       // Branch the call (not a union param) so the SDK overload resolves cleanly.
       if (ref.startsWith(SNAPSHOT_PREFIX)) {
@@ -66,13 +77,13 @@ export function createDaytonaHost(options: DaytonaHostOptions = {}): SandboxHost
       }
       if (ref.startsWith(DOCKERFILE_PREFIX)) {
         const sandbox = await daytona.create(
-          { ...base, image: Image.fromDockerfile(ref.slice(DOCKERFILE_PREFIX.length)) },
+          { ...base, resources, image: Image.fromDockerfile(ref.slice(DOCKERFILE_PREFIX.length)) },
           { timeout: BUILD_CREATE_TIMEOUT_S },
         );
         return wrap(sandbox);
       }
       const sandbox = await daytona.create(
-        { ...base, image: ref },
+        { ...base, resources, image: ref },
         { timeout: FAST_CREATE_TIMEOUT_S },
       );
       return wrap(sandbox);
@@ -80,6 +91,26 @@ export function createDaytonaHost(options: DaytonaHostOptions = {}): SandboxHost
     destroy: async (id: string): Promise<void> => {
       const sandbox = await daytona.get(id);
       await sandbox.delete();
+    },
+    status: async (id: string): Promise<SandboxStatus> => {
+      let sandbox: Awaited<ReturnType<Daytona["get"]>>;
+      try {
+        sandbox = await daytona.get(id);
+      } catch {
+        // get() throws once the box is fully removed from the account.
+        return "deleted";
+      }
+      // Daytona "stopped"/"archived" both keep the filesystem and can restart;
+      // only a delete is unrecoverable (and then get() throws, handled above).
+      const state = String(sandbox.state ?? "");
+      if (state === "started") return "running";
+      if (state === "stopped" || state === "archived") return "suspended";
+      if (state === "destroyed" || state === "deleted") return "deleted";
+      return "unknown";
+    },
+    resume: async (id: string): Promise<void> => {
+      const sandbox = await daytona.get(id);
+      await sandbox.start();
     },
   };
 }

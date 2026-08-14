@@ -107,6 +107,10 @@ import type {
   RemoteSandboxProvisionResponse,
   RemoteSandboxTeardownRequest,
   RemoteSandboxTeardownResponse,
+  RemoteSandboxStatusRequest,
+  RemoteSandboxStatusResponse,
+  RemoteSandboxResumeRequest,
+  RemoteSandboxResumeResponse,
 } from "@getpaseo/protocol/messages";
 import type {
   AgentPermissionRequest,
@@ -5362,6 +5366,32 @@ export class DaemonClient {
       requestId,
       message,
       responseType: "remote.sandbox.teardown.response",
+    });
+  }
+
+  async getRemoteSandboxStatus(sandboxId: string): Promise<RemoteSandboxStatusResponse["payload"]> {
+    const requestId = this.createRequestId();
+    const message: RemoteSandboxStatusRequest = {
+      type: "remote.sandbox.status.request",
+      payload: { requestId, sandboxId },
+    };
+    return this.sendCorrelatedRequest({
+      requestId,
+      message,
+      responseType: "remote.sandbox.status.response",
+    });
+  }
+
+  async resumeRemoteSandbox(sandboxId: string): Promise<RemoteSandboxResumeResponse["payload"]> {
+    const requestId = this.createRequestId();
+    const message: RemoteSandboxResumeRequest = {
+      type: "remote.sandbox.resume.request",
+      payload: { requestId, sandboxId },
+    };
+    return this.sendCorrelatedRequest({
+      requestId,
+      message,
+      responseType: "remote.sandbox.resume.response",
     });
   }
 

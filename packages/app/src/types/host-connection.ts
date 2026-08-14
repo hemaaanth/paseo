@@ -54,6 +54,13 @@ export interface HostProfile {
   updatedAt: string;
   /** FORK: remote sandbox — kept out of the host switcher (still aggregated). */
   hidden?: boolean;
+  /**
+   * FORK: remote sandbox — set when this host is a disposable cloud box. Carries
+   * the id to destroy and the provisioner daemon that can destroy it (the local
+   * daemon with the sandbox-host credentials). Provider-agnostic: teardown just
+   * hands `sandboxId` back to the provisioner, which calls the host adapter.
+   */
+  remoteSandbox?: { sandboxId: string; provisionerServerId: string };
 }
 
 export function defaultLifecycle(): HostLifecycle {
@@ -160,6 +167,18 @@ function upsertHostConnectionById(
   return next;
 }
 
+// FORK: remote sandbox — the optional remote-sandbox profile fields, extracted so
+// upsertHostConnectionInProfiles stays under the complexity limit.
+function remoteProfileFields(input: {
+  hidden?: boolean;
+  remoteSandbox?: { sandboxId: string; provisionerServerId: string };
+}): { hidden?: true; remoteSandbox?: { sandboxId: string; provisionerServerId: string } } {
+  return {
+    ...(input.hidden ? { hidden: true } : {}),
+    ...(input.remoteSandbox ? { remoteSandbox: input.remoteSandbox } : {}),
+  };
+}
+
 export function upsertHostConnectionInProfiles(input: {
   profiles: HostProfile[];
   serverId: string;
@@ -167,6 +186,7 @@ export function upsertHostConnectionInProfiles(input: {
   connection: HostConnection;
   now?: string;
   hidden?: boolean; // FORK: remote sandbox
+  remoteSandbox?: { sandboxId: string; provisionerServerId: string }; // FORK: remote sandbox
 }): HostProfile[] {
   const serverId = input.serverId.trim();
   if (!serverId) {
@@ -197,7 +217,7 @@ export function upsertHostConnectionInProfiles(input: {
       preferredConnectionId: input.connection.id,
       createdAt: now,
       updatedAt: now,
-      ...(input.hidden ? { hidden: true } : {}), // FORK: remote sandbox
+      ...remoteProfileFields(input), // FORK: remote sandbox
     };
     return [...existing, profile];
   }
@@ -333,6 +353,13 @@ const StoredHostProfileSchema = z.strictObject({
   preferredConnectionId: z.string().nullable().optional(),
   createdAt: z.string().datetime({ offset: true }).optional(),
   updatedAt: z.string().datetime({ offset: true }).optional(),
+  // FORK: remote sandbox — these are persisted on the profile, so the strict
+  // stored schema must accept them or validation fails and the WHOLE registry is
+  // wiped on load (the recurring "my session vanished" bug).
+  hidden: z.boolean().optional(),
+  remoteSandbox: z
+    .strictObject({ sandboxId: z.string(), provisionerServerId: z.string() })
+    .optional(),
 });
 export const StoredHostRegistrySchema = z.array(StoredHostProfileSchema);
 type StoredHostConnection = z.infer<typeof StoredHostConnectionSchema>;

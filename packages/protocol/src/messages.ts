@@ -2857,17 +2857,57 @@ export const RemoteSandboxTeardownResponseSchema = z.object({
   }),
 });
 
+// Lifecycle query + resume. Provider-agnostic status enum mirrors SandboxStatus.
+export const RemoteSandboxStatusRequestSchema = z.object({
+  type: z.literal("remote.sandbox.status.request"),
+  payload: z.object({
+    requestId: z.string(),
+    sandboxId: z.string(),
+  }),
+});
+
+export const RemoteSandboxStatusResponseSchema = z.object({
+  type: z.literal("remote.sandbox.status.response"),
+  payload: z.object({
+    requestId: z.string(),
+    status: z.enum(["running", "suspended", "deleted", "unknown"]),
+    error: z.string().nullable(),
+  }),
+});
+
+export const RemoteSandboxResumeRequestSchema = z.object({
+  type: z.literal("remote.sandbox.resume.request"),
+  payload: z.object({
+    requestId: z.string(),
+    sandboxId: z.string(),
+  }),
+});
+
+export const RemoteSandboxResumeResponseSchema = z.object({
+  type: z.literal("remote.sandbox.resume.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: z.string().nullable(),
+  }),
+});
+
 export type RemoteSandboxConnection = z.infer<typeof RemoteSandboxConnectionSchema>;
 export type RemoteSandboxProvisionRequest = z.infer<typeof RemoteSandboxProvisionRequestSchema>;
 export type RemoteSandboxTeardownRequest = z.infer<typeof RemoteSandboxTeardownRequestSchema>;
 export type RemoteSandboxProvisionResponse = z.infer<typeof RemoteSandboxProvisionResponseSchema>;
 export type RemoteSandboxProvisionProgress = z.infer<typeof RemoteSandboxProvisionProgressSchema>;
 export type RemoteSandboxTeardownResponse = z.infer<typeof RemoteSandboxTeardownResponseSchema>;
+export type RemoteSandboxStatusRequest = z.infer<typeof RemoteSandboxStatusRequestSchema>;
+export type RemoteSandboxStatusResponse = z.infer<typeof RemoteSandboxStatusResponseSchema>;
+export type RemoteSandboxResumeRequest = z.infer<typeof RemoteSandboxResumeRequestSchema>;
+export type RemoteSandboxResumeResponse = z.infer<typeof RemoteSandboxResumeResponseSchema>;
 
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   // FORK: remote sandbox
   RemoteSandboxProvisionRequestSchema,
   RemoteSandboxTeardownRequestSchema,
+  RemoteSandboxStatusRequestSchema,
+  RemoteSandboxResumeRequestSchema,
   HubExecutionAgentCreateRequestSchema,
   HubExecutionAgentValidateRequestSchema,
   HubExecutionControlRequestSchema,
@@ -5937,6 +5977,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   RemoteSandboxProvisionResponseSchema,
   RemoteSandboxProvisionProgressSchema,
   RemoteSandboxTeardownResponseSchema,
+  RemoteSandboxStatusResponseSchema,
+  RemoteSandboxResumeResponseSchema,
   HubExecutionAgentCreateResponseSchema,
   HubExecutionAgentValidateResponseSchema,
   HubExecutionControlResponseSchema,

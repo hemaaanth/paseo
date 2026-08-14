@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import type {
   RemoteSandboxProvisionRequest,
+  RemoteSandboxResumeRequest,
+  RemoteSandboxStatusRequest,
   RemoteSandboxTeardownRequest,
   SessionOutboundMessage,
 } from "@getpaseo/protocol/messages";
@@ -65,6 +67,7 @@ export function buildEnvProvisioner(logger: Logger): RemoteSandboxProvisioner | 
     logger,
     image: env["PASEO_SANDBOX_IMAGE"] ?? "paseo-sandbox:0.4.0",
     mintTailnetKey,
+    corsOrigins: env["PASEO_SANDBOX_CORS_ORIGINS"],
   });
 }
 
@@ -171,6 +174,54 @@ export class RemoteSandboxSession {
       const detail = error instanceof Error ? error.message : String(error);
       this.deps.emit({
         type: "remote.sandbox.teardown.response",
+        payload: { requestId, error: detail },
+      });
+    }
+  }
+
+  async handleStatusRequest(message: RemoteSandboxStatusRequest): Promise<void> {
+    const { requestId, sandboxId } = message.payload;
+    if (!this.provisioner) {
+      this.deps.emit({
+        type: "remote.sandbox.status.response",
+        payload: { requestId, status: "unknown", error: "remote sandbox is not configured" },
+      });
+      return;
+    }
+    try {
+      const status = await this.provisioner.status(sandboxId);
+      this.deps.emit({
+        type: "remote.sandbox.status.response",
+        payload: { requestId, status, error: null },
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.deps.emit({
+        type: "remote.sandbox.status.response",
+        payload: { requestId, status: "unknown", error: detail },
+      });
+    }
+  }
+
+  async handleResumeRequest(message: RemoteSandboxResumeRequest): Promise<void> {
+    const { requestId, sandboxId } = message.payload;
+    if (!this.provisioner) {
+      this.deps.emit({
+        type: "remote.sandbox.resume.response",
+        payload: { requestId, error: "remote sandbox is not configured" },
+      });
+      return;
+    }
+    try {
+      await this.provisioner.resume(sandboxId);
+      this.deps.emit({
+        type: "remote.sandbox.resume.response",
+        payload: { requestId, error: null },
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.deps.emit({
+        type: "remote.sandbox.resume.response",
         payload: { requestId, error: detail },
       });
     }

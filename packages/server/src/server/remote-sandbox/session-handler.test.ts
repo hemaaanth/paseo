@@ -40,6 +40,8 @@ const okProvisioner: RemoteSandboxProvisioner = {
     };
   },
   teardown: async () => {},
+  status: async () => "running",
+  resume: async () => {},
 };
 
 describe("RemoteSandboxSession", () => {
@@ -85,6 +87,8 @@ describe("RemoteSandboxSession", () => {
         throw new Error("daytona exploded");
       },
       teardown: async () => {},
+      status: async () => "running",
+      resume: async () => {},
     };
     const session = new RemoteSandboxSession({
       emit: h.emit,
