@@ -1,4 +1,4 @@
-import { Daytona } from "@daytona/sdk";
+import { Daytona, Image } from "@daytona/sdk";
 
 import type {
   CreateSandboxOptions,
@@ -15,11 +15,21 @@ export interface DaytonaHostOptions {
 }
 
 const DEFAULT_RESOURCES = { cpu: 2, memory: 4, disk: 10 };
+const SNAPSHOT_PREFIX = "snapshot:";
+const DOCKERFILE_PREFIX = "dockerfile:";
+// A pre-built snapshot / registry image boots fast; building from a Dockerfile
+// the first time is slow (rust/go/node) though Daytona caches the result.
+const FAST_CREATE_TIMEOUT_S = 180;
+const BUILD_CREATE_TIMEOUT_S = 1800;
 
 /**
- * Daytona-backed {@link SandboxHost}. The image is a pre-built snapshot ref, so
- * boxes boot fast — no per-provision build. Validated end-to-end by the spike
- * (scripts/remote-sandbox-spike.ts) and docs/remote-sandbox-spike.md.
+ * Daytona-backed {@link SandboxHost}. `opts.image` selects how the box is built:
+ *   - `snapshot:<name>` — boot from a pre-built Daytona snapshot (fastest; build
+ *     it once with `daytona.snapshot.create`). Recommended for real use.
+ *   - `dockerfile:<path>` — Daytona builds + caches the image from a Dockerfile
+ *     (slow first provision, no registry publish).
+ *   - `<ref>` — a registry image ref.
+ * Validated end-to-end by the spike (scripts/remote-sandbox-spike.ts).
  */
 export function createDaytonaHost(options: DaytonaHostOptions = {}): SandboxHost {
   const daytona = new Daytona(
@@ -39,13 +49,32 @@ export function createDaytonaHost(options: DaytonaHostOptions = {}): SandboxHost
 
   return {
     create: async (opts: CreateSandboxOptions): Promise<SandboxHandle> => {
-      const sandbox = await daytona.create({
-        image: opts.image,
+      const base = {
         envVars: opts.env,
         resources: opts.resources ?? DEFAULT_RESOURCES,
         autoStopInterval: opts.autoStopMinutes ?? 15,
         autoDeleteInterval: opts.autoDeleteMinutes ?? 60,
-      });
+      };
+      const ref = opts.image;
+      // Branch the call (not a union param) so the SDK overload resolves cleanly.
+      if (ref.startsWith(SNAPSHOT_PREFIX)) {
+        const sandbox = await daytona.create(
+          { ...base, snapshot: ref.slice(SNAPSHOT_PREFIX.length) },
+          { timeout: FAST_CREATE_TIMEOUT_S },
+        );
+        return wrap(sandbox);
+      }
+      if (ref.startsWith(DOCKERFILE_PREFIX)) {
+        const sandbox = await daytona.create(
+          { ...base, image: Image.fromDockerfile(ref.slice(DOCKERFILE_PREFIX.length)) },
+          { timeout: BUILD_CREATE_TIMEOUT_S },
+        );
+        return wrap(sandbox);
+      }
+      const sandbox = await daytona.create(
+        { ...base, image: ref },
+        { timeout: FAST_CREATE_TIMEOUT_S },
+      );
       return wrap(sandbox);
     },
     destroy: async (id: string): Promise<void> => {
