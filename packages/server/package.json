@@ -72,6 +72,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
     "@anthropic-ai/sdk": "^0.104.2",
     "@babel/parser": "^7.29.8",
+    "@daytona/sdk": "^0.204.1",
     "@getpaseo/client": "0.4.0",
     "@getpaseo/highlight": "0.4.0",
     "@getpaseo/protocol": "0.4.0",

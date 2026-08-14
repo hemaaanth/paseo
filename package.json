@@ -118,6 +118,7 @@
     "release:major": "npm run release:check && npm run version:all:major && npm run release:publish && npm run release:push"
   },
   "devDependencies": {
+    "@daytona/sdk": "^0.204.1",
     "@types/ws": "^8.5.14",
     "@typescript/native-preview": "7.0.0-dev.20260423.1",
     "@vercel/nft": "^1.5.0",

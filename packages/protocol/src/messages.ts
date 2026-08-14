@@ -2796,7 +2796,78 @@ export const HubExecutionControlRequestSchema = z.object({
 
 export type HubExecutionControlRequest = z.infer<typeof HubExecutionControlRequestSchema>;
 
+// ============================================================================
+// Remote sandbox (FORK feature — see docs/remote-workspace-plan.md). One
+// append-only block + union appends below, to keep rebasing on upstream cheap.
+// ============================================================================
+
+export const RemoteSandboxConnectionSchema = z.object({
+  sandboxId: z.string(),
+  tailnetIp: z.string(),
+  magicDns: z.string(),
+  password: z.string(),
+});
+
+export const RemoteSandboxProvisionRequestSchema = z.object({
+  type: z.literal("remote.sandbox.provision.request"),
+  payload: z.object({
+    requestId: z.string(),
+    // Local project checkout path; the daemon resolves its git origin to clone.
+    cwd: z.string(),
+    branch: z.string().optional(),
+  }),
+});
+
+export const RemoteSandboxTeardownRequestSchema = z.object({
+  type: z.literal("remote.sandbox.teardown.request"),
+  payload: z.object({
+    requestId: z.string(),
+    sandboxId: z.string(),
+  }),
+});
+
+export const RemoteSandboxProvisionResponseSchema = z.object({
+  type: z.literal("remote.sandbox.provision.response"),
+  payload: z.object({
+    requestId: z.string(),
+    provisionId: z.string(),
+    error: z.string().nullable(),
+  }),
+});
+
+// Unsolicited progress stream (no requestId) — mirrors workspace_setup_progress
+// so a multi-minute provision shows progress without hitting the RPC timeout.
+export const RemoteSandboxProvisionProgressSchema = z.object({
+  type: z.literal("remote.sandbox.provision.progress"),
+  payload: z.object({
+    provisionId: z.string(),
+    status: z.enum(["running", "completed", "failed"]),
+    step: z.string().optional(),
+    detail: z.string().optional(),
+    connection: RemoteSandboxConnectionSchema.optional(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const RemoteSandboxTeardownResponseSchema = z.object({
+  type: z.literal("remote.sandbox.teardown.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: z.string().nullable(),
+  }),
+});
+
+export type RemoteSandboxConnection = z.infer<typeof RemoteSandboxConnectionSchema>;
+export type RemoteSandboxProvisionRequest = z.infer<typeof RemoteSandboxProvisionRequestSchema>;
+export type RemoteSandboxTeardownRequest = z.infer<typeof RemoteSandboxTeardownRequestSchema>;
+export type RemoteSandboxProvisionResponse = z.infer<typeof RemoteSandboxProvisionResponseSchema>;
+export type RemoteSandboxProvisionProgress = z.infer<typeof RemoteSandboxProvisionProgressSchema>;
+export type RemoteSandboxTeardownResponse = z.infer<typeof RemoteSandboxTeardownResponseSchema>;
+
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
+  // FORK: remote sandbox
+  RemoteSandboxProvisionRequestSchema,
+  RemoteSandboxTeardownRequestSchema,
   HubExecutionAgentCreateRequestSchema,
   HubExecutionAgentValidateRequestSchema,
   HubExecutionControlRequestSchema,
@@ -3155,6 +3226,8 @@ export const ServerInfoStatusPayloadSchema = z
         forgeCheckDetails: z.boolean().optional(),
         // COMPAT(forgeSearch): added in v0.1.106, remove github_search fallback after 2026-12-28.
         forgeSearch: z.boolean().optional(),
+        // FORK: remote sandbox capability (daemon configured with Daytona/Tailscale creds).
+        remoteSandbox: z.boolean().optional(),
         // COMPAT(daemonStatusRpc): added in v0.1.76, remove gate after 2026-11-18.
         daemonStatusRpc: z.boolean().optional(),
         // COMPAT(relayConfig): added in v0.2.6, remove gate after 2027-01-31.
@@ -5860,6 +5933,10 @@ export const PluginRpcInvokeResponseSchema = z.object({
 });
 
 export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
+  // FORK: remote sandbox
+  RemoteSandboxProvisionResponseSchema,
+  RemoteSandboxProvisionProgressSchema,
+  RemoteSandboxTeardownResponseSchema,
   HubExecutionAgentCreateResponseSchema,
   HubExecutionAgentValidateResponseSchema,
   HubExecutionControlResponseSchema,

@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/menu";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { isWeb } from "@/constants/platform";
-import { useHosts } from "@/runtime/host-runtime";
+import { useVisibleHosts } from "@/runtime/host-runtime";
 import type { Theme } from "@/styles/theme";
 import type { SidebarGroupMode } from "@/stores/sidebar-view-store";
 import type { WorkspaceTitleSource } from "@/hooks/use-settings";
@@ -125,7 +125,7 @@ const TRAILING_LABEL_KEYS: Record<SidebarTrailingChoice, string> = {
 export function SidebarDisplayPreferencesMenu(): ReactElement {
   const { t } = useTranslation();
   const preferences = useSidebarDisplayPreferences();
-  const hosts = useHosts();
+  const hosts = useVisibleHosts();
 
   const triggerStyle = useCallback(
     ({ hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
@@ -385,7 +385,7 @@ function HostFilterPage({
   hosts,
 }: {
   preferences: Preferences;
-  hosts: ReturnType<typeof useHosts>;
+  hosts: ReturnType<typeof useVisibleHosts>;
 }): ReactElement {
   const { t } = useTranslation();
   return (

@@ -160,6 +160,8 @@ import {
   createGitMetadataGenerator,
 } from "./session/checkout/git-metadata-generator.js";
 import { ScheduleSession } from "./session/schedule/schedule-session.js";
+// FORK: remote sandbox
+import { RemoteSandboxSession } from "./remote-sandbox/session-handler.js";
 import { ProviderCatalogSession } from "./session/provider/provider-catalog-session.js";
 import { WorkspaceFilesSession } from "./session/files/workspace-files-session.js";
 import { AgentConfigSession } from "./session/agent-config/agent-config-session.js";
@@ -696,6 +698,7 @@ export class Session {
   private readonly voiceSession: VoiceSession;
   private readonly checkoutSession: CheckoutSession;
   private readonly scheduleSession: ScheduleSession;
+  private readonly remoteSandboxSession: RemoteSandboxSession; // FORK: remote sandbox
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
   private readonly agentConfigSession: AgentConfigSession;
@@ -863,6 +866,11 @@ export class Session {
     this.scheduleSession = new ScheduleSession({
       host: { emit: (msg) => this.emit(msg) },
       scheduleService,
+      logger: this.sessionLogger,
+    });
+    // FORK: remote sandbox
+    this.remoteSandboxSession = new RemoteSandboxSession({
+      emit: (msg) => this.emit(msg),
       logger: this.sessionLogger,
     });
     this.providerCatalogSession = new ProviderCatalogSession({
@@ -1885,6 +1893,7 @@ export class Session {
       this.dispatchPluginMessage(msg) ??
       this.dispatchTerminalMessage(msg) ??
       this.dispatchScheduleMessage(msg) ??
+      this.dispatchRemoteSandboxMessage(msg) ?? // FORK: remote sandbox
       this.dispatchMiscMessage(msg);
     if (promise) await promise;
   }
@@ -2399,6 +2408,18 @@ export class Session {
         return this.handleWorkspaceScriptStopRequest(msg);
       default:
         return this.terminalController.dispatch(msg);
+    }
+  }
+
+  // FORK: remote sandbox — delegates entirely to remote-sandbox/session-handler.
+  private dispatchRemoteSandboxMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "remote.sandbox.provision.request":
+        return this.remoteSandboxSession.handleProvisionRequest(msg);
+      case "remote.sandbox.teardown.request":
+        return this.remoteSandboxSession.handleTeardownRequest(msg);
+      default:
+        return undefined;
     }
   }
 

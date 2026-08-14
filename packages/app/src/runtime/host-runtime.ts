@@ -1690,6 +1690,7 @@ export class HostRuntimeStore {
     connection: HostConnection;
     label?: string;
     timeoutMs?: number;
+    hidden?: boolean; // FORK: remote sandbox
   }): Promise<{ profile: HostProfile; serverId: string; hostname: string | null }> {
     if (input.connection.type === "relay") {
       throw new Error("Cannot probe a relay connection without a server id.");
@@ -1714,6 +1715,7 @@ export class HostRuntimeStore {
       label: input.label ?? hostname ?? undefined,
       connection: input.connection,
       existingClient: client,
+      ...(input.hidden ? { hidden: true } : {}), // FORK: remote sandbox
     });
     return { profile, serverId, hostname };
   }
@@ -1723,6 +1725,7 @@ export class HostRuntimeStore {
     useTls?: boolean;
     password?: string;
     label?: string;
+    hidden?: boolean; // FORK: remote sandbox
   }): Promise<{ profile: HostProfile; serverId: string; hostname: string | null }> {
     const endpoint = normalizeHostPort(input.endpoint);
     const password = input.password?.trim();
@@ -1735,6 +1738,7 @@ export class HostRuntimeStore {
         useTls: input.useTls ?? false,
         ...(password ? { password } : {}),
       },
+      ...(input.hidden ? { hidden: true } : {}), // FORK: remote sandbox
     });
   }
 
@@ -1911,6 +1915,7 @@ export class HostRuntimeStore {
     label?: string;
     connection: HostConnection;
     existingClient?: DaemonClient;
+    hidden?: boolean; // FORK: remote sandbox
   }): Promise<HostProfile> {
     const now = new Date().toISOString();
     const next = upsertHostConnectionInProfiles({
@@ -1919,6 +1924,7 @@ export class HostRuntimeStore {
       label: input.label,
       connection: input.connection,
       now,
+      ...(input.hidden ? { hidden: true } : {}), // FORK: remote sandbox
     });
     this.setHostsAndSync(next, {
       initialConnectionByServerId: input.existingClient
@@ -2442,6 +2448,13 @@ export function useHosts(): HostProfile[] {
     () => store.getHosts(),
     () => store.getHosts(),
   );
+}
+
+// FORK: remote sandbox — hosts shown in the SWITCHER/chooser (excludes hidden
+// sandbox hosts). Aggregation hooks keep using useHosts() so remote workspaces
+// still appear in the unified sidebar.
+export function useVisibleHosts(): HostProfile[] {
+  return useHosts().filter((host) => !host.hidden);
 }
 
 export function useHostRegistryStatus(): HostRegistryStatus {
