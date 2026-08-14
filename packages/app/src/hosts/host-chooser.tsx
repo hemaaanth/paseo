@@ -20,7 +20,7 @@ import {
   useGlobalWebOverlayLayer,
   useWebOverlayRegistration,
 } from "@/lib/overlay-root";
-import { useHosts } from "@/runtime/host-runtime";
+import { useVisibleHosts } from "@/runtime/host-runtime";
 import { orderHostsLocalFirst, type HostProfile } from "@/types/host-connection";
 import { buildSettingsAddHostRoute } from "@/utils/host-routes";
 
@@ -67,7 +67,7 @@ function matchesHostQuery(host: HostProfile, query: string): boolean {
 }
 
 export function useHostChooser() {
-  const hosts = useHosts();
+  const hosts = useVisibleHosts();
   const localServerId = useLocalDaemonServerId();
   const open = useHostChooserStore((state) => state.open);
 
@@ -142,7 +142,7 @@ function HostChooserRow({
 
 export function HostChooserModal() {
   const { theme } = useUnistyles();
-  const hosts = useHosts();
+  const hosts = useVisibleHosts();
   const request = useHostChooserStore((state) => state.request);
   const close = useHostChooserStore((state) => state.close);
   const inputRef = useRef<TextInput>(null);

@@ -52,6 +52,8 @@ export interface HostProfile {
   preferredConnectionId: string | null;
   createdAt: string;
   updatedAt: string;
+  /** FORK: remote sandbox — kept out of the host switcher (still aggregated). */
+  hidden?: boolean;
 }
 
 export function defaultLifecycle(): HostLifecycle {
@@ -164,6 +166,7 @@ export function upsertHostConnectionInProfiles(input: {
   label?: string;
   connection: HostConnection;
   now?: string;
+  hidden?: boolean; // FORK: remote sandbox
 }): HostProfile[] {
   const serverId = input.serverId.trim();
   if (!serverId) {
@@ -194,6 +197,7 @@ export function upsertHostConnectionInProfiles(input: {
       preferredConnectionId: input.connection.id,
       createdAt: now,
       updatedAt: now,
+      ...(input.hidden ? { hidden: true } : {}), // FORK: remote sandbox
     };
     return [...existing, profile];
   }

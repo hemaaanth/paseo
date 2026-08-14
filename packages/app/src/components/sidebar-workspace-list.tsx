@@ -1943,7 +1943,13 @@ export function SidebarWorkspaceList({
   // nothing", and each host's own `badgeDisplay` decides name vs icon vs hidden. Turning the
   // item off here removes the badge everywhere; leaving it on defers to the per-host setting.
   const hostBadgeByServerId = useHostBadges({
-    enabled: rowItems.host && shouldShowSidebarHostLabels(projects),
+    enabled:
+      rowItems.host &&
+      // FORK: remote sandbox — exclude hidden sandbox hosts from the count.
+      shouldShowSidebarHostLabels(
+        projects,
+        new Set(hosts.filter((host) => host.hidden).map((host) => host.serverId)),
+      ),
   });
   const serverIds = useMemo(() => hosts.map((host) => host.serverId), [hosts]);
   const supportsMultiplicityByServerId = useHostFeatureMap(serverIds, "workspaceMultiplicity");

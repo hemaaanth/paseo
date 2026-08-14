@@ -102,6 +102,11 @@ import type {
   WorkspaceCreateRequest,
   WorkspaceRecoveryState,
   PluginListItem,
+  // FORK: remote sandbox
+  RemoteSandboxProvisionRequest,
+  RemoteSandboxProvisionResponse,
+  RemoteSandboxTeardownRequest,
+  RemoteSandboxTeardownResponse,
 } from "@getpaseo/protocol/messages";
 import type {
   AgentPermissionRequest,
@@ -5320,6 +5325,44 @@ export class DaemonClient {
 
   private createRequestId(requestId?: string): string {
     return requestId ?? crypto.randomUUID();
+  }
+
+  // FORK: remote sandbox. Kicks off provisioning; the daemon acks fast then
+  // streams `remote.sandbox.provision.progress` events (subscribe via `on()`).
+  async provisionRemoteSandbox(input: {
+    cwd: string;
+    branch?: string;
+  }): Promise<RemoteSandboxProvisionResponse["payload"]> {
+    const requestId = this.createRequestId();
+    const message: RemoteSandboxProvisionRequest = {
+      type: "remote.sandbox.provision.request",
+      payload: {
+        requestId,
+        cwd: input.cwd,
+        ...(input.branch !== undefined ? { branch: input.branch } : {}),
+      },
+    };
+    return this.sendCorrelatedRequest({
+      requestId,
+      message,
+      responseType: "remote.sandbox.provision.response",
+    });
+  }
+
+  // FORK: remote sandbox.
+  async teardownRemoteSandbox(
+    sandboxId: string,
+  ): Promise<RemoteSandboxTeardownResponse["payload"]> {
+    const requestId = this.createRequestId();
+    const message: RemoteSandboxTeardownRequest = {
+      type: "remote.sandbox.teardown.request",
+      payload: { requestId, sandboxId },
+    };
+    return this.sendCorrelatedRequest({
+      requestId,
+      message,
+      responseType: "remote.sandbox.teardown.response",
+    });
   }
 
   getLastServerInfoMessage(): ServerInfoStatusPayload | null {

@@ -1,0 +1,72 @@
+# Base sandbox image for Paseo "Remote" workspaces.
+#
+# Official daemon (pinned to 0.4.0) + agent CLIs + auth'd tool CLIs + mise
+# language toolchains + Docker-in-Docker + Tailscale. Built ONCE and published /
+# snapshotted; the provisioner boots boxes from it rather than installing at
+# provision time. Version literals are starting points — verify before publishing.
+#
+#   docker build -f docker/Dockerfile.sandbox -t paseo-sandbox:0.4.0 .
+#
+# Devbox/nix repos (goldsky) get a layered snapshot — see Dockerfile.sandbox-goldsky.
+
+FROM ghcr.io/getpaseo/paseo:0.4.0
+
+USER root
+
+# System build deps: native modules for node/rust/python + common CLI utils.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential pkg-config libssl-dev ca-certificates curl wget \
+      git git-lfs cmake unzip xz-utils jq ripgrep fd-find shellcheck sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# gh CLI — private clone / push / `gh pr create`.
+RUN curl -fsSL https://github.com/cli/cli/releases/download/v2.97.0/gh_2.97.0_linux_amd64.tar.gz \
+      | tar -xz -C /tmp \
+    && install /tmp/gh_2.97.0_linux_amd64/bin/gh /usr/local/bin/gh \
+    && rm -rf /tmp/gh_2.97.0_linux_amd64
+
+# Tailscale (userspace). `tailscaled` + `tailscale up` run at provision time with
+# a per-box ephemeral key minted from a Tailscale OAuth client.
+RUN curl -fsSL https://pkgs.tailscale.com/stable/tailscale_1.102.2_amd64.tgz \
+      | tar -xz -C /tmp \
+    && install /tmp/tailscale_1.102.2_amd64/tailscale /usr/local/bin/ \
+    && install /tmp/tailscale_1.102.2_amd64/tailscaled /usr/local/bin/ \
+    && rm -rf /tmp/tailscale_1.102.2_amd64
+
+# Docker-in-Docker. Daytona sandboxes have a dedicated kernel, so a real dockerd
+# runs inside for `docker build`/run of the repos that ship Dockerfiles. dockerd
+# is started at boot by the provisioner. Needs >=2 vCPU / 4GiB (already set).
+RUN curl -fsSL https://get.docker.com | sh
+
+# Agent CLIs + linear-cli (npm-global; mise's npm backend aborts on its build
+# script in a non-interactive build, so install it directly).
+RUN npm install -g @anthropic-ai/claude-code @openai/codex @ruminaider/linear-cli
+
+# --- mise + language toolchains + tool CLIs, for the `paseo` user the daemon runs as ---
+USER paseo
+ENV PATH="/home/paseo/.local/bin:/home/paseo/.local/share/mise/shims:${PATH}"
+RUN curl -fsSL https://mise.run | sh
+
+# One config: a SINGLE version of each runtime (no multi-version bloat) plus the
+# manifest tool CLIs. posthog needs the release-asset regex (mirrors the user's
+# mise config). Per-repo pins in a cloned repo resolve at clone time.
+RUN mkdir -p ~/.config/mise && cat > ~/.config/mise/config.toml <<'EOF'
+[tools]
+node = "latest"
+pnpm = "latest"
+bun = "latest"
+uv = "latest"
+python = "3.13"
+go = "latest"
+rust = "latest"
+just = "latest"
+"npm:@railway/cli" = "latest"
+"github:PostHog/posthog" = { version = "latest", version_prefix = "posthog-cli/v", matching_regex = "^posthog-cli-x86_64-unknown-linux-gnu\\.tar\\.gz$" }
+EOF
+RUN mise trust ~/.config/mise/config.toml && mise install -y
+
+# corepack so a repo's package.json `packageManager` pin (pnpm@x / bun@y) is
+# honored per repo without a global version fight.
+RUN mise exec -- corepack enable || true
+
+USER root

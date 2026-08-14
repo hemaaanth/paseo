@@ -44,10 +44,13 @@ import {
   useHostRuntimeClient,
   useHostRuntimeConnectionStatuses,
   useHostRuntimeIsConnected,
-  useHosts,
+  useVisibleHosts,
   type HostRuntimeConnectionStatus,
 } from "@/runtime/host-runtime";
 import { useHostFeature, useHostFeatureMap } from "@/runtime/host-features";
+// FORK: remote sandbox
+import { RemoteSandboxSection } from "@/components/remote-sandbox-section";
+import { useRemoteSandboxProvision } from "@/runtime/remote-sandbox";
 import type { HostProfile } from "@/types/host-connection";
 import {
   navigateToWorkspace,
@@ -152,8 +155,11 @@ function resolveVisibleDraftContextScopeKeys(input: {
 function isNewWorkspacePending(input: {
   pendingAction: "chat" | "empty" | "terminal" | null;
   isDraftHandoffActive: boolean;
+  remoteProvisioning?: boolean; // FORK: remote sandbox
 }): boolean {
-  return input.pendingAction !== null || input.isDraftHandoffActive;
+  return (
+    input.pendingAction !== null || input.isDraftHandoffActive || input.remoteProvisioning === true
+  );
 }
 
 function buildFirstAgentContext(input: {
@@ -1212,7 +1218,7 @@ function useNewWorkspaceInitialContext({
   projectId,
   displayName: displayNameProp,
 }: NewWorkspaceScreenProps): NewWorkspaceInitialContextState {
-  const allHosts = useHosts();
+  const allHosts = useVisibleHosts();
   const allServerIds = useMemo(() => allHosts.map((h) => h.serverId), [allHosts]);
   const projects = useHostProjects(allServerIds);
   const routeDisplayName = displayNameProp?.trim() ?? "";
@@ -1572,6 +1578,10 @@ export function NewWorkspaceScreen({
   // COMPAT(workspaceMultiplicity): added in v0.1.97, drop the gate when floor >= v0.1.97
   const supportsWorkspaceMultiplicity = useHostFeature(selectedServerId, "workspaceMultiplicity");
   const supportsForgeSearch = useHostFeature(selectedServerId, "forgeSearch");
+  // FORK: remote sandbox
+  const supportsRemoteSandbox = useHostFeature(selectedServerId, "remoteSandbox");
+  const [remoteEnabled, setRemoteEnabled] = useState(false);
+  const { state: remoteState, provision: provisionRemote } = useRemoteSandboxProvision();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createdWorkspace, setCreatedWorkspace] = useState<ReturnType<
     typeof normalizeWorkspaceDescriptor
@@ -1725,7 +1735,11 @@ export function NewWorkspaceScreen({
   const worktreeSupport = selectedProject
     ? getWorktreeSupportForHostProject({ project: selectedProject, serverId: selectedServerId })
     : "unsupported";
-  const isPending = isNewWorkspacePending({ pendingAction, isDraftHandoffActive });
+  const isPending = isNewWorkspacePending({
+    pendingAction,
+    isDraftHandoffActive,
+    remoteProvisioning: remoteState.status === "provisioning", // FORK: remote sandbox
+  });
   const { effectiveIsolation, setIsolation, canCreateWorktree, showRefPicker } =
     useWorkspaceIsolation({
       supportsMultiplicity: supportsWorkspaceMultiplicity,
@@ -2052,6 +2066,15 @@ export function NewWorkspaceScreen({
         setErrorMessage(null);
         await composerState?.persistFormPreferences();
         await updateFormPreferences({ launchTarget });
+        // FORK: remote sandbox — provision a cloud box instead of a local workspace.
+        if (remoteEnabled && supportsRemoteSandbox && client) {
+          await provisionRemote({
+            client,
+            cwd: selectedSourceDirectory ?? "",
+            prompt: payload.text,
+          });
+          return;
+        }
         if (isEmptyWorkspaceSubmission(payload)) {
           setPendingAction("empty");
           await runCreateEmptyWorkspace({
@@ -2088,6 +2111,12 @@ export function NewWorkspaceScreen({
     },
     [
       composerState,
+      // FORK: remote sandbox
+      remoteEnabled,
+      supportsRemoteSandbox,
+      client,
+      provisionRemote,
+      selectedSourceDirectory,
       draftId,
       draftKey,
       ensureWorkspace,
@@ -2290,6 +2319,14 @@ export function NewWorkspaceScreen({
             <Text style={styles.composerTitle}>{t("newWorkspace.title")}</Text>
           </View>
           {formStack}
+          {/* FORK: remote sandbox */}
+          <RemoteSandboxSection
+            supported={supportsRemoteSandbox}
+            enabled={remoteEnabled}
+            onToggle={setRemoteEnabled}
+            disabled={isPending}
+            state={remoteState}
+          />
           {isTerminalLaunch ? (
             <Composer
               externalKeyboardShift

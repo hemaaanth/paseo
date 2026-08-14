@@ -1,0 +1,28 @@
+# Devbox/nix-capable sandbox snapshot, layered on the base image.
+#
+# For repos whose toolchain is defined by devbox.json + flake.nix rather than
+# mise — e.g. the goldsky monorepo (monorepo, website, cms, docs). On clone the
+# provisioner runs `devbox install` in the repo to materialize its exact tools
+# via nix. Kept separate from the base so nix's weight isn't paid by every box.
+#
+#   docker build -f docker/Dockerfile.sandbox-devbox -t paseo-sandbox-devbox:0.4.0 .
+#
+# nix-in-container has known gotchas; this is a starting point — verify on build.
+
+FROM paseo-sandbox:0.4.0
+
+USER root
+
+# Nix via the Determinate Systems installer (container-friendly, no daemon/init).
+RUN curl -fsSL https://install.determinate.systems/nix \
+      | sh -s -- install linux --no-confirm --init none
+ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
+
+# Devbox (drives nix under the hood).
+RUN curl -fsSL https://get.jetify.com/devbox | FORCE=1 bash
+
+# Optional further speedup (not done here): clone a specific repo at build time
+# with a build secret and run `devbox install`, so the box boots with the env
+# already materialized. Today the provisioner runs `devbox install` on clone.
+
+USER root
