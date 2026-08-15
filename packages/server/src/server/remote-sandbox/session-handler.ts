@@ -4,6 +4,7 @@ import type {
   RemoteSandboxConfigGetRequest,
   RemoteSandboxConfigSetRequest,
   RemoteSandboxConfigTestRequest,
+  RemoteSandboxRedactedConfig,
   RemoteSandboxProvisionRequest,
   RemoteSandboxResumeRequest,
   RemoteSandboxStatusRequest,
@@ -56,6 +57,26 @@ function resolveCreds(): {
       c.tailscaleOauthClientSecret || env["TAILSCALE_OAUTH_CLIENT_SECRET"],
     tailscaleTag: c.tailscaleTag || env["TAILSCALE_TAG"],
     image: c.image || env["PASEO_SANDBOX_IMAGE"],
+  };
+}
+
+/**
+ * Redacted config that reflects the EFFECTIVE creds (settings config OR env), so
+ * an env-configured daemon shows "configured" rather than "not set". Non-secret
+ * fields show their effective value.
+ */
+function redactedEffectiveConfig(): RemoteSandboxRedactedConfig {
+  const stored = getRemoteSandboxConfigStore().read();
+  const creds = resolveCreds();
+  return {
+    provider: stored.provider,
+    daytonaApiUrl: creds.daytonaApiUrl,
+    daytonaApiKeyConfigured: Boolean(creds.daytonaApiKey),
+    tailscaleAuthKeyConfigured: Boolean(creds.tailscaleAuthKey),
+    tailscaleOauthClientId: creds.tailscaleOauthClientId,
+    tailscaleOauthClientSecretConfigured: Boolean(creds.tailscaleOauthClientSecret),
+    tailscaleTag: creds.tailscaleTag,
+    image: creds.image,
   };
 }
 
@@ -263,26 +284,23 @@ export class RemoteSandboxSession {
   async handleConfigGetRequest(message: RemoteSandboxConfigGetRequest): Promise<void> {
     this.deps.emit({
       type: "remote.sandbox.config.get.response",
-      payload: {
-        requestId: message.payload.requestId,
-        config: getRemoteSandboxConfigStore().redacted(),
-      },
+      payload: { requestId: message.payload.requestId, config: redactedEffectiveConfig() },
     });
   }
 
   async handleConfigSetRequest(message: RemoteSandboxConfigSetRequest): Promise<void> {
     const { requestId, patch } = message.payload;
     try {
-      const config = getRemoteSandboxConfigStore().update(patch);
+      getRemoteSandboxConfigStore().update(patch);
       this.deps.emit({
         type: "remote.sandbox.config.set.response",
-        payload: { requestId, config, error: null },
+        payload: { requestId, config: redactedEffectiveConfig(), error: null },
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       this.deps.emit({
         type: "remote.sandbox.config.set.response",
-        payload: { requestId, config: getRemoteSandboxConfigStore().redacted(), error: detail },
+        payload: { requestId, config: redactedEffectiveConfig(), error: detail },
       });
     }
   }
