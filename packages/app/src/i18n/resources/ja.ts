@@ -1804,6 +1804,7 @@ export const ja: TranslationResources = {
       usage: "使用状況",
       terminals: "ターミナル",
       plugins: "プラグイン",
+      remoteSandbox: "Remote sandbox",
       host: "概要",
     },
     plugins: pluginSettings.ja,

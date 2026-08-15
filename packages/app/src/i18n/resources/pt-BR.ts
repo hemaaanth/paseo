@@ -1817,6 +1817,7 @@ export const ptBR: TranslationResources = {
       usage: "Uso",
       terminals: "Terminais",
       plugins: "Plugins",
+      remoteSandbox: "Remote sandbox",
       host: "Visão geral",
     },
     plugins: pluginSettings["pt-BR"],

@@ -1798,6 +1798,7 @@ export const ko: TranslationResources = {
       usage: "사용량",
       terminals: "터미널",
       plugins: "플러그인",
+      remoteSandbox: "Remote sandbox",
       host: "개요",
     },
     plugins: pluginSettings.ko,

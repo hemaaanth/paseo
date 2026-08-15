@@ -1768,6 +1768,7 @@ export const zhCN: TranslationResources = {
       usage: "使用情况",
       terminals: "Terminals",
       plugins: "插件",
+      remoteSandbox: "Remote sandbox",
       host: "概览",
     },
     plugins: pluginSettings["zh-CN"],

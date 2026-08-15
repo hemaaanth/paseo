@@ -1822,6 +1822,7 @@ export const ru: TranslationResources = {
       usage: "Использование",
       terminals: "Terminals",
       plugins: "Plugins",
+      remoteSandbox: "Remote sandbox",
       host: "Обзор",
     },
     plugins: pluginSettings.ru,

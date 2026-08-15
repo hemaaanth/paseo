@@ -1798,6 +1798,7 @@ export const en = {
       usage: "Usage",
       terminals: "Terminals",
       plugins: "Plugins",
+      remoteSandbox: "Remote sandbox",
       host: "Overview",
     },
     plugins: {

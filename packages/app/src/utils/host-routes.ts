@@ -518,6 +518,7 @@ export const HOST_SECTION_SLUGS = [
   "usage",
   "terminals",
   "plugins",
+  "remote-sandbox", // FORK: remote sandbox
   "host",
 ] as const;
 

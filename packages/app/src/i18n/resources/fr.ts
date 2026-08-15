@@ -1835,6 +1835,7 @@ export const fr: TranslationResources = {
       usage: "Utilisation",
       terminals: "Terminals",
       plugins: "Plugins",
+      remoteSandbox: "Remote sandbox",
       host: "Aperçu",
     },
     plugins: pluginSettings.fr,
