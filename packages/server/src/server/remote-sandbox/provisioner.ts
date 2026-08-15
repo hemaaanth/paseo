@@ -68,6 +68,7 @@ export interface RemoteSandboxProvisioner {
   teardown(sandboxId: string): Promise<void>;
   status(sandboxId: string): Promise<SandboxStatus>;
   resume(sandboxId: string): Promise<void>;
+  check(): Promise<void>;
 }
 
 async function execOrThrow(box: SandboxHandle, command: string, what: string): Promise<string> {
@@ -280,5 +281,7 @@ export function createRemoteSandboxProvisioner(
     status: (sandboxId: string): Promise<SandboxStatus> => deps.host.status(sandboxId),
 
     resume: (sandboxId: string): Promise<void> => deps.host.resume(sandboxId),
+
+    check: (): Promise<void> => deps.host.check(),
   };
 }

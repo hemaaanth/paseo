@@ -50,4 +50,6 @@ export interface SandboxHost {
   status(id: string): Promise<SandboxStatus>;
   /** Wake a suspended box. Throw if the provider can't (or the box is deleted). */
   resume(id: string): Promise<void>;
+  /** Cheap auth/reachability probe for a "test connection" button. Throw on failure. */
+  check(): Promise<void>;
 }

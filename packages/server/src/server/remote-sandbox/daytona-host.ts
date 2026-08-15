@@ -112,5 +112,9 @@ export function createDaytonaHost(options: DaytonaHostOptions = {}): SandboxHost
       const sandbox = await daytona.get(id);
       await sandbox.start();
     },
+    check: async (): Promise<void> => {
+      // Lists sandboxes on the account; a bad API key / URL throws (401/network).
+      await daytona.list();
+    },
   };
 }

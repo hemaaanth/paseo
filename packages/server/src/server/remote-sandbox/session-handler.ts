@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type {
   RemoteSandboxConfigGetRequest,
   RemoteSandboxConfigSetRequest,
+  RemoteSandboxConfigTestRequest,
   RemoteSandboxProvisionRequest,
   RemoteSandboxResumeRequest,
   RemoteSandboxStatusRequest,
@@ -282,6 +283,31 @@ export class RemoteSandboxSession {
       this.deps.emit({
         type: "remote.sandbox.config.set.response",
         payload: { requestId, config: getRemoteSandboxConfigStore().redacted(), error: detail },
+      });
+    }
+  }
+
+  async handleConfigTestRequest(message: RemoteSandboxConfigTestRequest): Promise<void> {
+    const { requestId } = message.payload;
+    const provisioner = this.provisioner;
+    if (!provisioner) {
+      this.deps.emit({
+        type: "remote.sandbox.config.test.response",
+        payload: { requestId, ok: false, error: "remote sandbox is not configured" },
+      });
+      return;
+    }
+    try {
+      await provisioner.check();
+      this.deps.emit({
+        type: "remote.sandbox.config.test.response",
+        payload: { requestId, ok: true, error: null },
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.deps.emit({
+        type: "remote.sandbox.config.test.response",
+        payload: { requestId, ok: false, error: detail },
       });
     }
   }

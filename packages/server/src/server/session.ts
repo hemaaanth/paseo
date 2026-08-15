@@ -2426,6 +2426,8 @@ export class Session {
         return this.remoteSandboxSession.handleConfigGetRequest(msg);
       case "remote.sandbox.config.set.request":
         return this.remoteSandboxSession.handleConfigSetRequest(msg);
+      case "remote.sandbox.config.test.request":
+        return this.remoteSandboxSession.handleConfigTestRequest(msg);
       default:
         return undefined;
     }

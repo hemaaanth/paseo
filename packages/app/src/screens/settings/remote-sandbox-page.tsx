@@ -3,6 +3,7 @@
 // saves via the write-only patch (a secret you don't re-type is kept).
 import { useCallback, useEffect, useState } from "react";
 import { Alert, ScrollView, Text, TextInput, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 
 import type {
@@ -16,13 +17,14 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { SettingsSection } from "@/screens/settings/settings-section";
 
-function secretPlaceholder(configured: boolean): string {
-  return configured ? "•••••••• configured — type to replace" : "not set";
-}
+type TestResult = { ok: boolean; message: string } | null;
 
 export function RemoteSandboxSettingsPage({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
   const [config, setConfig] = useState<RemoteSandboxRedactedConfig | null>(null);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult>(null);
   const [daytonaApiKey, setDaytonaApiKey] = useState("");
   const [daytonaApiUrl, setDaytonaApiUrl] = useState("");
   const [tailscaleAuthKey, setTailscaleAuthKey] = useState("");
@@ -52,6 +54,7 @@ export function RemoteSandboxSettingsPage({ serverId }: { serverId: string }) {
       return;
     }
     setSaving(true);
+    setTestResult(null);
     try {
       const patch: RemoteSandboxConfigPatch = {
         provider: "daytona",
@@ -66,13 +69,46 @@ export function RemoteSandboxSettingsPage({ serverId }: { serverId: string }) {
         throw new Error(res.error);
       }
       applyLoaded(res.config);
-      Alert.alert("Saved", "Remote sandbox settings updated.");
+      Alert.alert(t("settings.remoteSandbox.saved"), t("settings.remoteSandbox.savedBody"));
     } catch (error) {
-      Alert.alert("Couldn't save", error instanceof Error ? error.message : String(error));
+      Alert.alert(
+        t("settings.remoteSandbox.saveError"),
+        error instanceof Error ? error.message : String(error),
+      );
     } finally {
       setSaving(false);
     }
-  }, [serverId, daytonaApiKey, daytonaApiUrl, tailscaleAuthKey, tailscaleTag, image, applyLoaded]);
+  }, [
+    serverId,
+    daytonaApiKey,
+    daytonaApiUrl,
+    tailscaleAuthKey,
+    tailscaleTag,
+    image,
+    applyLoaded,
+    t,
+  ]);
+
+  const testConnection = useCallback(async () => {
+    const client = getHostRuntimeStore().getClient(serverId);
+    if (!client) {
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await client.testRemoteSandboxConfig();
+      setTestResult(
+        res.ok
+          ? { ok: true, message: t("settings.remoteSandbox.testOk") }
+          : { ok: false, message: res.error ?? t("settings.remoteSandbox.testFailed") },
+      );
+    } catch (error) {
+      setTestResult({ ok: false, message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setTesting(false);
+    }
+  }, [serverId, t]);
 
   if (!config) {
     return (
@@ -82,21 +118,23 @@ export function RemoteSandboxSettingsPage({ serverId }: { serverId: string }) {
     );
   }
 
+  const secretPlaceholder = (configured: boolean): string =>
+    configured
+      ? t("settings.remoteSandbox.secretConfigured")
+      : t("settings.remoteSandbox.secretNotSet");
+
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <SettingsSection title="Remote sandbox">
-        <Text style={styles.desc}>
-          Run workspaces in disposable cloud sandboxes. Keys are stored on this daemon and never
-          shown back to any client.
-        </Text>
-        <Field label="Provider">
+      <SettingsSection title={t("settings.remoteSandbox.title")}>
+        <Text style={styles.desc}>{t("settings.remoteSandbox.description")}</Text>
+        <Field label={t("settings.remoteSandbox.provider")}>
           <TextInput
             style={[styles.input, styles.inputDisabled]}
             value="Daytona"
             editable={false}
           />
         </Field>
-        <Field label="Daytona API key">
+        <Field label={t("settings.remoteSandbox.daytonaApiKey")}>
           <TextInput
             style={styles.input}
             secureTextEntry
@@ -108,7 +146,7 @@ export function RemoteSandboxSettingsPage({ serverId }: { serverId: string }) {
             onChangeText={setDaytonaApiKey}
           />
         </Field>
-        <Field label="Daytona API URL">
+        <Field label={t("settings.remoteSandbox.daytonaApiUrl")}>
           <TextInput
             style={styles.input}
             autoCapitalize="none"
@@ -119,7 +157,10 @@ export function RemoteSandboxSettingsPage({ serverId }: { serverId: string }) {
             onChangeText={setDaytonaApiUrl}
           />
         </Field>
-        <Field label="Tailscale auth key" hint="Reusable + ephemeral key from your own tailnet.">
+        <Field
+          label={t("settings.remoteSandbox.tailscaleAuthKey")}
+          hint={t("settings.remoteSandbox.tailscaleAuthKeyHint")}
+        >
           <TextInput
             style={styles.input}
             secureTextEntry
@@ -131,7 +172,7 @@ export function RemoteSandboxSettingsPage({ serverId }: { serverId: string }) {
             onChangeText={setTailscaleAuthKey}
           />
         </Field>
-        <Field label="Tailscale tag">
+        <Field label={t("settings.remoteSandbox.tailscaleTag")}>
           <TextInput
             style={styles.input}
             autoCapitalize="none"
@@ -142,7 +183,10 @@ export function RemoteSandboxSettingsPage({ serverId }: { serverId: string }) {
             onChangeText={setTailscaleTag}
           />
         </Field>
-        <Field label="Sandbox image" hint="Snapshot/image ref the box boots from.">
+        <Field
+          label={t("settings.remoteSandbox.image")}
+          hint={t("settings.remoteSandbox.imageHint")}
+        >
           <TextInput
             style={styles.input}
             autoCapitalize="none"
@@ -155,9 +199,21 @@ export function RemoteSandboxSettingsPage({ serverId }: { serverId: string }) {
         </Field>
         <View style={styles.actions}>
           <Button variant="default" onPress={save} disabled={saving}>
-            <Text style={styles.saveLabel}>{saving ? "Saving…" : "Save"}</Text>
+            <Text style={styles.saveLabel}>
+              {saving ? t("settings.remoteSandbox.saving") : t("settings.remoteSandbox.save")}
+            </Text>
+          </Button>
+          <Button variant="secondary" onPress={testConnection} disabled={testing || saving}>
+            <Text style={styles.testLabel}>
+              {testing
+                ? t("settings.remoteSandbox.testing")
+                : t("settings.remoteSandbox.testConnection")}
+            </Text>
           </Button>
         </View>
+        {testResult ? (
+          <Text style={testResult.ok ? styles.testOk : styles.testError}>{testResult.message}</Text>
+        ) : null}
       </SettingsSection>
     </ScrollView>
   );
@@ -183,6 +239,22 @@ const styles = StyleSheet.create((theme) => ({
   },
   inputDisabled: { color: theme.colors.foregroundMuted },
   placeholder: { color: theme.colors.foregroundExtraMuted },
-  actions: { marginTop: theme.spacing[4], alignItems: "flex-start" },
+  actions: {
+    marginTop: theme.spacing[4],
+    flexDirection: "row",
+    gap: theme.spacing[2],
+    alignItems: "center",
+  },
   saveLabel: { color: theme.colors.background, fontSize: theme.fontSize.sm },
+  testLabel: { color: theme.colors.foreground, fontSize: theme.fontSize.sm },
+  testOk: {
+    marginTop: theme.spacing[3],
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.statusSuccess,
+  },
+  testError: {
+    marginTop: theme.spacing[3],
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.destructive,
+  },
 }));

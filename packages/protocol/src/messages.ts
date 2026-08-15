@@ -2946,6 +2946,21 @@ export const RemoteSandboxConfigSetResponseSchema = z.object({
   }),
 });
 
+// "Test connection" — probe the saved provider creds (env fallback included).
+export const RemoteSandboxConfigTestRequestSchema = z.object({
+  type: z.literal("remote.sandbox.config.test.request"),
+  payload: z.object({ requestId: z.string() }),
+});
+
+export const RemoteSandboxConfigTestResponseSchema = z.object({
+  type: z.literal("remote.sandbox.config.test.response"),
+  payload: z.object({
+    requestId: z.string(),
+    ok: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
 export type RemoteSandboxConnection = z.infer<typeof RemoteSandboxConnectionSchema>;
 export type RemoteSandboxProvisionRequest = z.infer<typeof RemoteSandboxProvisionRequestSchema>;
 export type RemoteSandboxTeardownRequest = z.infer<typeof RemoteSandboxTeardownRequestSchema>;
@@ -2962,6 +2977,8 @@ export type RemoteSandboxConfigGetRequest = z.infer<typeof RemoteSandboxConfigGe
 export type RemoteSandboxConfigGetResponse = z.infer<typeof RemoteSandboxConfigGetResponseSchema>;
 export type RemoteSandboxConfigSetRequest = z.infer<typeof RemoteSandboxConfigSetRequestSchema>;
 export type RemoteSandboxConfigSetResponse = z.infer<typeof RemoteSandboxConfigSetResponseSchema>;
+export type RemoteSandboxConfigTestRequest = z.infer<typeof RemoteSandboxConfigTestRequestSchema>;
+export type RemoteSandboxConfigTestResponse = z.infer<typeof RemoteSandboxConfigTestResponseSchema>;
 
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   // FORK: remote sandbox
@@ -2971,6 +2988,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   RemoteSandboxResumeRequestSchema,
   RemoteSandboxConfigGetRequestSchema,
   RemoteSandboxConfigSetRequestSchema,
+  RemoteSandboxConfigTestRequestSchema,
   HubExecutionAgentCreateRequestSchema,
   HubExecutionAgentValidateRequestSchema,
   HubExecutionControlRequestSchema,
@@ -6044,6 +6062,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   RemoteSandboxResumeResponseSchema,
   RemoteSandboxConfigGetResponseSchema,
   RemoteSandboxConfigSetResponseSchema,
+  RemoteSandboxConfigTestResponseSchema,
   HubExecutionAgentCreateResponseSchema,
   HubExecutionAgentValidateResponseSchema,
   HubExecutionControlResponseSchema,

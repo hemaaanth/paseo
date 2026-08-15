@@ -115,6 +115,8 @@ import type {
   RemoteSandboxConfigGetResponse,
   RemoteSandboxConfigSetRequest,
   RemoteSandboxConfigSetResponse,
+  RemoteSandboxConfigTestRequest,
+  RemoteSandboxConfigTestResponse,
   RemoteSandboxConfigPatch,
 } from "@getpaseo/protocol/messages";
 import type {
@@ -5425,6 +5427,19 @@ export class DaemonClient {
       requestId,
       message,
       responseType: "remote.sandbox.config.set.response",
+    });
+  }
+
+  async testRemoteSandboxConfig(): Promise<RemoteSandboxConfigTestResponse["payload"]> {
+    const requestId = this.createRequestId();
+    const message: RemoteSandboxConfigTestRequest = {
+      type: "remote.sandbox.config.test.request",
+      payload: { requestId },
+    };
+    return this.sendCorrelatedRequest({
+      requestId,
+      message,
+      responseType: "remote.sandbox.config.test.response",
     });
   }
 

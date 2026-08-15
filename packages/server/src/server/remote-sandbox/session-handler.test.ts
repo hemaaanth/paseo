@@ -42,6 +42,7 @@ const okProvisioner: RemoteSandboxProvisioner = {
   teardown: async () => {},
   status: async () => "running",
   resume: async () => {},
+  check: async () => {},
 };
 
 describe("RemoteSandboxSession", () => {
@@ -89,6 +90,7 @@ describe("RemoteSandboxSession", () => {
       teardown: async () => {},
       status: async () => "running",
       resume: async () => {},
+      check: async () => {},
     };
     const session = new RemoteSandboxSession({
       emit: h.emit,

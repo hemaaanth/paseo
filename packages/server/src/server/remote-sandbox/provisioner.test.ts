@@ -42,6 +42,7 @@ function makeFakeHost(execImpl?: (command: string) => SandboxExecResult): FakeHo
     },
     status: async () => "running",
     resume: async () => {},
+    check: async () => {},
   };
   return { host, commands, destroyed };
 }
