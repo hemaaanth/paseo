@@ -1,6 +1,7 @@
-// FORK: remote sandbox. The "Remote" toggle + provisioning progress/error banner
-// for the New Workspace screen, extracted so the screen stays under its
-// complexity budget. All remote logic lives in @/runtime/remote-sandbox.
+// FORK: remote sandbox. Compact "Remote" toggle for the New Workspace screen.
+// Just a label + switch — the provisioning progress/error renders down by the
+// composer (see new-workspace-screen), not here. All remote logic lives in
+// @/runtime/remote-sandbox.
 import type { ReactElement } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -13,7 +14,6 @@ interface RemoteSandboxSectionProps {
   enabled: boolean;
   onToggle: (value: boolean) => void;
   disabled: boolean;
-  state: RemoteProvisionState;
 }
 
 export function RemoteSandboxSection({
@@ -21,34 +21,49 @@ export function RemoteSandboxSection({
   enabled,
   onToggle,
   disabled,
-  state,
 }: RemoteSandboxSectionProps): ReactElement | null {
-  if (!supported && state.status === "idle") {
+  if (!supported) {
     return null;
   }
   return (
-    <View>
-      {supported ? (
-        <View style={styles.row}>
-          <View style={styles.textColumn}>
-            <Text style={styles.label}>Remote sandbox</Text>
-            <Text style={styles.description}>Run this workspace in a disposable cloud sandbox</Text>
-          </View>
-          <Switch
-            value={enabled}
-            onValueChange={onToggle}
-            disabled={disabled}
-            accessibilityLabel="Provision this workspace in a remote sandbox"
-          />
-        </View>
-      ) : null}
+    <View style={styles.row}>
+      <Text style={styles.label}>Remote sandbox</Text>
+      <Switch
+        value={enabled}
+        onValueChange={onToggle}
+        disabled={disabled}
+        accessibilityLabel="Provision this workspace in a remote sandbox"
+      />
+    </View>
+  );
+}
+
+// Provisioning progress / error, rendered down by the composer. Fixed-height slot
+// so text arriving never shifts the (vertically centered) block; right-aligned to
+// the composer's inner edge. `enabled` gate lives here to keep the caller simple.
+export function RemoteProvisionStatusLine({
+  state,
+  enabled,
+}: {
+  state: RemoteProvisionState;
+  enabled: boolean;
+}): ReactElement | null {
+  if (!enabled) {
+    return null;
+  }
+  return (
+    <View style={styles.statusSlot}>
       {state.status === "provisioning" ? (
-        <Text style={styles.status}>
+        <Text numberOfLines={1} style={styles.statusText}>
           {state.step ?? "Provisioning…"}
           {state.detail ? ` — ${state.detail}` : ""}
         </Text>
       ) : null}
-      {state.status === "error" ? <Text style={styles.error}>{state.message}</Text> : null}
+      {state.status === "error" ? (
+        <Text numberOfLines={1} style={styles.statusError}>
+          {state.message}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -58,33 +73,40 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingLeft: theme.spacing[4],
-    paddingRight: theme.spacing[4],
-    marginBottom: theme.spacing[4],
-    gap: theme.spacing[4],
-  },
-  textColumn: {
-    flex: 1,
-    gap: theme.spacing[1],
+    // Match the picker row above: its chips sit at spacing[4] + the chip's own
+    // spacing[2] badge padding (= spacing[6]) on the left, and its trailing edge
+    // stops on the composer's inner content rather than the container edge. We
+    // have no badge, so we inset to spacing[6] directly to line up text with
+    // "sher" and pull the toggle in under the composer's send button.
+    paddingLeft: theme.spacing[6],
+    paddingRight: theme.spacing[6],
+    // The picker row above carries marginBottom: spacing[8] (sized for the
+    // no-sandbox picker→composer gap). Pull the row up so the picker→sandbox gap
+    // is tight and roughly matches the spacing[3] below it, without touching the
+    // picker's own spacing.
+    marginTop: -theme.spacing[6],
+    marginBottom: theme.spacing[3],
+    gap: theme.spacing[3],
   },
   label: {
     fontSize: theme.fontSize.sm,
-    color: theme.colors.foreground,
-  },
-  description: {
-    fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
   },
-  status: {
+  statusSlot: {
+    height: theme.spacing[6],
+    marginTop: theme.spacing[2],
+    justifyContent: "center",
+  },
+  statusText: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
-    paddingLeft: theme.spacing[4],
-    marginBottom: theme.spacing[2],
+    textAlign: "right",
+    paddingRight: theme.spacing[6],
   },
-  error: {
+  statusError: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.destructive,
-    paddingLeft: theme.spacing[4],
-    marginBottom: theme.spacing[2],
+    textAlign: "right",
+    paddingRight: theme.spacing[6],
   },
 }));

@@ -1,6 +1,6 @@
 # Remote workspaces — implementation plan
 
-**Status:** plan. The groundwork is proven in [remote-sandbox-spike.md](remote-sandbox-spike.md); this doc turns the spike into a shipped feature. Fold the durable parts into [providers.md](providers.md) / [architecture.md](architecture.md) once built and delete this file.
+**Status:** mostly shipped on the `design/remote-sandbox-mvp` fork (not upstreamed). The spike ([remote-sandbox-spike.md](remote-sandbox-spike.md)) proved the groundwork; **Shipped** below is what's built, **Open decisions** is what's left. Fold the durable parts into [providers.md](providers.md) / [architecture.md](architecture.md) if this ever upstreams, then delete this file.
 
 ## Goal
 
@@ -13,6 +13,39 @@ is one.
 Scope for v1: one provider (Daytona), ephemeral per-task boxes, Tailscale
 connection, unified presentation. Not in v1: MCP `mcp-remote` bearer automation,
 OMP, cost/idle dashboards, second sandbox provider.
+
+## Shipped
+
+All under `packages/server/src/server/remote-sandbox/` (daemon) and the app files noted.
+
+- **Provisioner** — `SandboxHost` interface (`sandbox-host.ts`) + Daytona adapter
+  (`daytona-host.ts`); `provisioner.ts` seeds creds/MCP, clones, joins the tailnet,
+  starts the in-box daemon. Snapshot boot (`snapshot:` ref), backgrounded toolchain
+  install, detached daemon-start + readiness polling (Daytona exec hangs on a
+  backgrounded process holding stdout), bounded exec timeouts, `tailscale up` retry.
+- **RPCs** — `remote.sandbox.provision` (fast ack + progress stream), `.teardown`,
+  `.status`/`.resume` (provider-neutral running/suspended/deleted), and
+  `.config.get`/`.set`/`.test` (settings). Env vars remain a fallback for creds.
+- **App** — `runtime/remote-sandbox.ts` provisions, connects the hidden host
+  (`hidden` + `remoteSandbox` on the host profile — both persisted, see the wipe
+  fix below), and kickstarts the first agent with the composer's picker settings
+  (provider/model/mode/thinking/fast). Compact "Remote" toggle + fixed-height
+  status on New Workspace; cloud icon on remote sidebar rows.
+- **Lifecycle + teardown** — archiving a remote workspace destroys its box via the
+  provisioner (`use-workspace-archive.ts`); `SandboxHost.status()/resume()` back the
+  lifecycle states.
+- **Settings** — `screens/settings/remote-sandbox-page.tsx` (Settings → host →
+  Remote sandbox) on a write-only config store (`config-store.ts`): secrets stay on
+  the daemon, clients only ever see "configured". "Test connection" probes creds.
+
+Still open (see also Open decisions): warm-resume (start a suspended box →
+re-bootstrap tailnet+daemon → reconnect), reconnect-on-startup for remote hosts,
+a second provider, and mirrored history (read-only after a cloud delete).
+
+**Registry-wipe fix (critical):** persisting `hidden`/`remoteSandbox` on the host
+profile without adding them to the strict `StoredHostRegistrySchema` made the whole
+registry fail validation and get deleted on reload — a remote session would vanish.
+Any new persisted `HostProfile` field must be added to that schema.
 
 ## Why the unified UX is cheap (the key finding)
 
@@ -190,10 +223,13 @@ the `*.ts.net` name to `PASEO_HOSTNAMES`. No public preview, no relay.
   support Docker-in-Docker, so the base image bundles Docker and the repos that
   ship Dockerfiles can `docker build` in-box. `dockerd` starts at boot; needs
   ≥2 vCPU / 4 GiB (already allocated).
-- **Who holds the creds.** Daytona key + Tailscale OAuth client live in daemon
-  config on the provisioning host — never in the app.
-- **Teardown policy.** Default to Daytona `autoStop`/`autoDelete`; explicit
-  teardown RPC for "done with this task".
+- **Who holds the creds — shipped.** Daytona key + Tailscale key live in a
+  write-only daemon config (`config-store.ts`, `$PASEO_HOME/remote-sandbox-config.json`,
+  0600). Clients set values but only ever read back "configured" booleans — secrets
+  never leave the daemon. Env vars remain a fallback. Configured via the settings page.
+- **Teardown policy — shipped.** Archiving a remote workspace destroys its box now
+  (`use-workspace-archive.ts` → `remote.sandbox.teardown`). Daytona `autoStop`
+  (15 min) / `autoDelete` (60 min) remain the backstop for boxes that aren't archived.
 
 ## Security
 

@@ -19,6 +19,25 @@ function purgeArchivedWorkspaceState(input: { serverId: string; workspaceId: str
   }
 }
 
+// FORK: remote sandbox. If this host is a disposable cloud box, tell its
+// provisioner daemon to destroy it, then forget the hidden host. Best-effort:
+// the box also auto-deletes on its own, so a failure here is not fatal.
+async function teardownRemoteSandboxForHost(serverId: string): Promise<void> {
+  const store = getHostRuntimeStore();
+  const host = store.getHosts().find((h) => h.serverId === serverId);
+  const remote = host?.remoteSandbox;
+  if (!remote) {
+    return;
+  }
+  try {
+    const provisioner = store.getClient(remote.provisionerServerId);
+    await provisioner?.teardownRemoteSandbox(remote.sandboxId);
+  } catch {
+    // Non-fatal: the provider auto-deletes the box as a backstop.
+  }
+  await store.removeHost(serverId).catch(() => {});
+}
+
 export interface ArchiveWorkspaceInput {
   serverId: string;
   workspaceId: string;
@@ -69,6 +88,10 @@ export function useWorkspaceArchive(input: ArchiveWorkspaceInput): WorkspaceArch
         },
       });
       purgeArchivedWorkspaceState({ serverId, workspaceId });
+      // FORK: remote sandbox — archiving a cloud workspace destroys its box.
+      // Route teardown back to the provisioner daemon (which owns the sandbox
+      // host adapter); it's provider-agnostic — we just hand back the sandboxId.
+      await teardownRemoteSandboxForHost(serverId);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("sidebar.workspace.toasts.archiveFailed"),

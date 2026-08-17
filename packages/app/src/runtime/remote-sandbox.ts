@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { RemoteSandboxConnection } from "@getpaseo/protocol/messages";
 
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
@@ -26,6 +27,23 @@ export interface RemoteProvisionInput {
   cwd: string;
   branch?: string;
   prompt: string;
+  /** serverId of the provisioner daemon (the one with sandbox-host creds), so
+   *  teardown can route back to it when the workspace is archived. */
+  provisionerServerId: string;
+  /**
+   * The composer's picker settings, forwarded verbatim so the sandbox agent
+   * runs with exactly what the UI shows (provider, model, permission mode,
+   * thinking level, fast mode). The sandbox has these providers via seeded OAuth.
+   */
+  agentConfig?: RemoteAgentConfig;
+}
+
+export interface RemoteAgentConfig {
+  provider?: AgentProvider;
+  modeId?: string;
+  model?: string;
+  thinkingOptionId?: string;
+  featureValues?: Record<string, unknown>;
 }
 
 function labelFor(cwd: string): string {
@@ -58,14 +76,20 @@ export function useRemoteSandboxProvision(): {
       try {
         setState({ status: "provisioning", step: "Connecting to sandbox" });
         const store = getHostRuntimeStore();
-        const { serverId } = await store.probeAndUpsertDirectConnection({
+        // Use the client the probe already connected+authed. getClient(serverId)
+        // races to null here: the controller adopts the connection asynchronously.
+        const { serverId, client: sandboxClient } = await store.probeAndUpsertDirectConnection({
           endpoint: `${connection.tailnetIp}:${SANDBOX_DAEMON_PORT}`,
           useTls: false,
           password: connection.password,
           label: labelFor(input.cwd),
           hidden: true, // keep the ephemeral sandbox out of the host switcher
+          // Remember how to destroy this box on archive (provider-agnostic).
+          remoteSandbox: {
+            sandboxId: connection.sandboxId,
+            provisionerServerId: input.provisionerServerId,
+          },
         });
-        const sandboxClient = store.getClient(serverId);
         if (!sandboxClient) throw new Error("could not connect to the remote sandbox");
         const prompt = input.prompt.trim();
         const payload = await sandboxClient.createWorkspace({
@@ -74,6 +98,23 @@ export function useRemoteSandboxProvision(): {
         });
         if (payload.error || !payload.workspace) {
           throw new Error(payload.error ?? "workspace creation failed on the sandbox");
+        }
+        // createWorkspace only names the workspace; it does not run the prompt.
+        // Kick off the first agent so the prompt actually reaches it (the normal
+        // path does this via submitWorkspaceDraft). The provider is the one the
+        // user picked, which the sandbox has via its seeded OAuth.
+        if (prompt) {
+          const cfg = input.agentConfig ?? {};
+          await sandboxClient.createAgent({
+            workspaceId: payload.workspace.id,
+            cwd: SANDBOX_REPO_DIR,
+            initialPrompt: prompt,
+            ...(cfg.provider ? { provider: cfg.provider } : {}),
+            ...(cfg.modeId ? { modeId: cfg.modeId } : {}),
+            ...(cfg.model ? { model: cfg.model } : {}),
+            ...(cfg.thinkingOptionId ? { thinkingOptionId: cfg.thinkingOptionId } : {}),
+            ...(cfg.featureValues ? { featureValues: cfg.featureValues } : {}),
+          });
         }
         navigateToWorkspace({ serverId, workspaceId: payload.workspace.id });
         setState({ status: "idle" });

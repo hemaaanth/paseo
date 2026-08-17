@@ -2857,17 +2857,138 @@ export const RemoteSandboxTeardownResponseSchema = z.object({
   }),
 });
 
+// Lifecycle query + resume. Provider-agnostic status enum mirrors SandboxStatus.
+export const RemoteSandboxStatusRequestSchema = z.object({
+  type: z.literal("remote.sandbox.status.request"),
+  payload: z.object({
+    requestId: z.string(),
+    sandboxId: z.string(),
+  }),
+});
+
+export const RemoteSandboxStatusResponseSchema = z.object({
+  type: z.literal("remote.sandbox.status.response"),
+  payload: z.object({
+    requestId: z.string(),
+    status: z.enum(["running", "suspended", "deleted", "unknown"]),
+    error: z.string().nullable(),
+  }),
+});
+
+export const RemoteSandboxResumeRequestSchema = z.object({
+  type: z.literal("remote.sandbox.resume.request"),
+  payload: z.object({
+    requestId: z.string(),
+    sandboxId: z.string(),
+  }),
+});
+
+export const RemoteSandboxResumeResponseSchema = z.object({
+  type: z.literal("remote.sandbox.resume.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: z.string().nullable(),
+  }),
+});
+
+// Settings config. Secrets never leave the daemon — the redacted view reports
+// only whether each secret is configured. The write patch carries new values;
+// omitted keys are kept (write-only secrets).
+export const RemoteSandboxRedactedConfigSchema = z.object({
+  provider: z.string().optional(),
+  daytonaApiUrl: z.string().optional(),
+  daytonaApiKeyConfigured: z.boolean(),
+  tailscaleAuthKeyConfigured: z.boolean(),
+  tailscaleOauthClientId: z.string().optional(),
+  tailscaleOauthClientSecretConfigured: z.boolean(),
+  tailscaleTag: z.string().optional(),
+  image: z.string().optional(),
+});
+
+export const RemoteSandboxConfigPatchSchema = z.object({
+  provider: z.string().optional(),
+  daytonaApiKey: z.string().optional(),
+  daytonaApiUrl: z.string().optional(),
+  tailscaleAuthKey: z.string().optional(),
+  tailscaleOauthClientId: z.string().optional(),
+  tailscaleOauthClientSecret: z.string().optional(),
+  tailscaleTag: z.string().optional(),
+  image: z.string().optional(),
+});
+
+export const RemoteSandboxConfigGetRequestSchema = z.object({
+  type: z.literal("remote.sandbox.config.get.request"),
+  payload: z.object({ requestId: z.string() }),
+});
+
+export const RemoteSandboxConfigGetResponseSchema = z.object({
+  type: z.literal("remote.sandbox.config.get.response"),
+  payload: z.object({
+    requestId: z.string(),
+    config: RemoteSandboxRedactedConfigSchema,
+  }),
+});
+
+export const RemoteSandboxConfigSetRequestSchema = z.object({
+  type: z.literal("remote.sandbox.config.set.request"),
+  payload: z.object({
+    requestId: z.string(),
+    patch: RemoteSandboxConfigPatchSchema,
+  }),
+});
+
+export const RemoteSandboxConfigSetResponseSchema = z.object({
+  type: z.literal("remote.sandbox.config.set.response"),
+  payload: z.object({
+    requestId: z.string(),
+    config: RemoteSandboxRedactedConfigSchema,
+    error: z.string().nullable(),
+  }),
+});
+
+// "Test connection" — probe the saved provider creds (env fallback included).
+export const RemoteSandboxConfigTestRequestSchema = z.object({
+  type: z.literal("remote.sandbox.config.test.request"),
+  payload: z.object({ requestId: z.string() }),
+});
+
+export const RemoteSandboxConfigTestResponseSchema = z.object({
+  type: z.literal("remote.sandbox.config.test.response"),
+  payload: z.object({
+    requestId: z.string(),
+    ok: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
 export type RemoteSandboxConnection = z.infer<typeof RemoteSandboxConnectionSchema>;
 export type RemoteSandboxProvisionRequest = z.infer<typeof RemoteSandboxProvisionRequestSchema>;
 export type RemoteSandboxTeardownRequest = z.infer<typeof RemoteSandboxTeardownRequestSchema>;
 export type RemoteSandboxProvisionResponse = z.infer<typeof RemoteSandboxProvisionResponseSchema>;
 export type RemoteSandboxProvisionProgress = z.infer<typeof RemoteSandboxProvisionProgressSchema>;
 export type RemoteSandboxTeardownResponse = z.infer<typeof RemoteSandboxTeardownResponseSchema>;
+export type RemoteSandboxStatusRequest = z.infer<typeof RemoteSandboxStatusRequestSchema>;
+export type RemoteSandboxStatusResponse = z.infer<typeof RemoteSandboxStatusResponseSchema>;
+export type RemoteSandboxResumeRequest = z.infer<typeof RemoteSandboxResumeRequestSchema>;
+export type RemoteSandboxResumeResponse = z.infer<typeof RemoteSandboxResumeResponseSchema>;
+export type RemoteSandboxRedactedConfig = z.infer<typeof RemoteSandboxRedactedConfigSchema>;
+export type RemoteSandboxConfigPatch = z.infer<typeof RemoteSandboxConfigPatchSchema>;
+export type RemoteSandboxConfigGetRequest = z.infer<typeof RemoteSandboxConfigGetRequestSchema>;
+export type RemoteSandboxConfigGetResponse = z.infer<typeof RemoteSandboxConfigGetResponseSchema>;
+export type RemoteSandboxConfigSetRequest = z.infer<typeof RemoteSandboxConfigSetRequestSchema>;
+export type RemoteSandboxConfigSetResponse = z.infer<typeof RemoteSandboxConfigSetResponseSchema>;
+export type RemoteSandboxConfigTestRequest = z.infer<typeof RemoteSandboxConfigTestRequestSchema>;
+export type RemoteSandboxConfigTestResponse = z.infer<typeof RemoteSandboxConfigTestResponseSchema>;
 
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   // FORK: remote sandbox
   RemoteSandboxProvisionRequestSchema,
   RemoteSandboxTeardownRequestSchema,
+  RemoteSandboxStatusRequestSchema,
+  RemoteSandboxResumeRequestSchema,
+  RemoteSandboxConfigGetRequestSchema,
+  RemoteSandboxConfigSetRequestSchema,
+  RemoteSandboxConfigTestRequestSchema,
   HubExecutionAgentCreateRequestSchema,
   HubExecutionAgentValidateRequestSchema,
   HubExecutionControlRequestSchema,
@@ -5937,6 +6058,11 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   RemoteSandboxProvisionResponseSchema,
   RemoteSandboxProvisionProgressSchema,
   RemoteSandboxTeardownResponseSchema,
+  RemoteSandboxStatusResponseSchema,
+  RemoteSandboxResumeResponseSchema,
+  RemoteSandboxConfigGetResponseSchema,
+  RemoteSandboxConfigSetResponseSchema,
+  RemoteSandboxConfigTestResponseSchema,
   HubExecutionAgentCreateResponseSchema,
   HubExecutionAgentValidateResponseSchema,
   HubExecutionControlResponseSchema,

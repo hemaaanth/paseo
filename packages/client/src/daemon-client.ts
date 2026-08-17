@@ -107,6 +107,17 @@ import type {
   RemoteSandboxProvisionResponse,
   RemoteSandboxTeardownRequest,
   RemoteSandboxTeardownResponse,
+  RemoteSandboxStatusRequest,
+  RemoteSandboxStatusResponse,
+  RemoteSandboxResumeRequest,
+  RemoteSandboxResumeResponse,
+  RemoteSandboxConfigGetRequest,
+  RemoteSandboxConfigGetResponse,
+  RemoteSandboxConfigSetRequest,
+  RemoteSandboxConfigSetResponse,
+  RemoteSandboxConfigTestRequest,
+  RemoteSandboxConfigTestResponse,
+  RemoteSandboxConfigPatch,
 } from "@getpaseo/protocol/messages";
 import type {
   AgentPermissionRequest,
@@ -5362,6 +5373,73 @@ export class DaemonClient {
       requestId,
       message,
       responseType: "remote.sandbox.teardown.response",
+    });
+  }
+
+  async getRemoteSandboxStatus(sandboxId: string): Promise<RemoteSandboxStatusResponse["payload"]> {
+    const requestId = this.createRequestId();
+    const message: RemoteSandboxStatusRequest = {
+      type: "remote.sandbox.status.request",
+      payload: { requestId, sandboxId },
+    };
+    return this.sendCorrelatedRequest({
+      requestId,
+      message,
+      responseType: "remote.sandbox.status.response",
+    });
+  }
+
+  async resumeRemoteSandbox(sandboxId: string): Promise<RemoteSandboxResumeResponse["payload"]> {
+    const requestId = this.createRequestId();
+    const message: RemoteSandboxResumeRequest = {
+      type: "remote.sandbox.resume.request",
+      payload: { requestId, sandboxId },
+    };
+    return this.sendCorrelatedRequest({
+      requestId,
+      message,
+      responseType: "remote.sandbox.resume.response",
+    });
+  }
+
+  async getRemoteSandboxConfig(): Promise<RemoteSandboxConfigGetResponse["payload"]> {
+    const requestId = this.createRequestId();
+    const message: RemoteSandboxConfigGetRequest = {
+      type: "remote.sandbox.config.get.request",
+      payload: { requestId },
+    };
+    return this.sendCorrelatedRequest({
+      requestId,
+      message,
+      responseType: "remote.sandbox.config.get.response",
+    });
+  }
+
+  async setRemoteSandboxConfig(
+    patch: RemoteSandboxConfigPatch,
+  ): Promise<RemoteSandboxConfigSetResponse["payload"]> {
+    const requestId = this.createRequestId();
+    const message: RemoteSandboxConfigSetRequest = {
+      type: "remote.sandbox.config.set.request",
+      payload: { requestId, patch },
+    };
+    return this.sendCorrelatedRequest({
+      requestId,
+      message,
+      responseType: "remote.sandbox.config.set.response",
+    });
+  }
+
+  async testRemoteSandboxConfig(): Promise<RemoteSandboxConfigTestResponse["payload"]> {
+    const requestId = this.createRequestId();
+    const message: RemoteSandboxConfigTestRequest = {
+      type: "remote.sandbox.config.test.request",
+      payload: { requestId },
+    };
+    return this.sendCorrelatedRequest({
+      requestId,
+      message,
+      responseType: "remote.sandbox.config.test.response",
     });
   }
 
